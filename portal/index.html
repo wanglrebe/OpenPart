@@ -1,0 +1,30 @@
+<!-- portal/index.html -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="OpenPart - 开源零件搜索门户，快速查找电子元件规格参数" />
+  <title>OpenPart - 零件搜索门户</title>
+  <style>
+    /* 防止页面闪烁的基础样式 */
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background-color: #F8FAFC;
+      color: #1E293B;
+      transition: background-color 0.3s ease, color 0.3s ease;
+    }
+    
+    [data-theme="dark"] body {
+      background-color: #0F172A;
+      color: #F1F5F9;
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

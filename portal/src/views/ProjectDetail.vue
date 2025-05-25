@@ -1,4 +1,4 @@
-<!-- portal/src/views/ProjectDetail.vue (集成版本) -->
+<!-- portal/src/views/ProjectDetail.vue (优化版本 - 显示零件名称和缩略图) -->
 <template>
   <div class="project-detail-page">
     <!-- 头部导航 -->
@@ -192,13 +192,35 @@
                   <div class="selected-part-info">
                     <h4>已选择零件</h4>
                     <div class="part-details">
-                      <span class="part-name">零件 #{{ item.part_id }}</span>
-                      <button 
-                        class="view-part-btn"
-                        @click="viewPartDetail(item.part_id)"
-                      >
-                        查看详情
-                      </button>
+                      <!-- 零件缩略图 -->
+                      <div class="part-thumbnail">
+                        <img 
+                          v-if="getPartInfo(item.part_id)?.image_url && !imageErrors[item.part_id]" 
+                          :src="getPartInfo(item.part_id).image_url" 
+                          :alt="getPartInfo(item.part_id)?.name || `零件 #${item.part_id}`"
+                          class="part-img"
+                          @error="onImageError(item.part_id)"
+                        />
+                        <div v-else class="part-placeholder">
+                          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                          </svg>
+                        </div>
+                      </div>
+                      
+                      <!-- 零件信息 -->
+                      <div class="part-detail-info">
+                        <span class="part-name">{{ getPartInfo(item.part_id)?.name || `零件 #${item.part_id}` }}</span>
+                        <span v-if="getPartInfo(item.part_id)?.category" class="part-category-tag">
+                          {{ getPartInfo(item.part_id).category }}
+                        </span>
+                        <button 
+                          class="view-part-btn"
+                          @click="viewPartDetail(item.part_id)"
+                        >
+                          查看详情
+                        </button>
+                      </div>
                     </div>
                   </div>
                   <button 
@@ -320,7 +342,7 @@ import { useRoute, useRouter } from 'vue-router'
 import ThemeToggle from '../components/ThemeToggle.vue'
 import PartSelector from '../components/PartSelector.vue'
 import { getTemplateById } from '../data/projectTemplates'
-import { partsCacheManager } from '../utils/api'
+import { partsAPI } from '../utils/api'
 
 export default {
   name: 'ProjectDetail',
@@ -339,6 +361,10 @@ export default {
     const showSettings = ref(false)
     const showPartSelector = ref(false)
     const currentSelectingItem = ref(null)
+    
+    // 零件信息缓存和图片错误状态
+    const partsCache = ref({})
+    const imageErrors = ref({})
     
     // 消息提示
     const toast = ref({
@@ -406,8 +432,47 @@ export default {
       return project.value.items.filter(item => item.status === statusFilter.value)
     })
     
+    // 加载零件信息
+    const loadPartInfo = async (partId) => {
+      if (partsCache.value[partId]) {
+        return partsCache.value[partId]
+      }
+      
+      try {
+        const response = await partsAPI.getPart(partId)
+        partsCache.value[partId] = response.data
+        return response.data
+      } catch (error) {
+        console.error('加载零件信息失败:', error)
+        // 返回默认信息
+        const defaultInfo = {
+          id: partId,
+          name: `零件 #${partId}`,
+          category: '',
+          image_url: null
+        }
+        partsCache.value[partId] = defaultInfo
+        return defaultInfo
+      }
+    }
+    
+    // 获取零件信息
+    const getPartInfo = (partId) => {
+      return partsCache.value[partId] || { 
+        id: partId,
+        name: `零件 #${partId}`,
+        category: '',
+        image_url: null
+      }
+    }
+    
+    // 图片加载错误处理
+    const onImageError = (partId) => {
+      imageErrors.value[partId] = true
+    }
+    
     // 加载项目
-    const loadProject = () => {
+    const loadProject = async () => {
       loading.value = true
       
       const projectId = route.params.id
@@ -416,6 +481,14 @@ export default {
       if (foundProject) {
         project.value = foundProject
         template.value = getTemplateById(foundProject.template_id)
+        
+        // 预加载所有零件信息
+        const partIds = foundProject.items
+          .filter(item => item.part_id)
+          .map(item => item.part_id)
+        
+        // 并行加载所有零件信息
+        await Promise.all(partIds.map(partId => loadPartInfo(partId)))
       }
       
       loading.value = false
@@ -459,16 +532,6 @@ export default {
       return statusMap[status] || status
     }
     
-    // 替换原有的 getPartName 方法：
-    const getPartName = async (partId) => {
-      try {
-        const partInfo = await partsCacheManager.getPartInfo(partId)
-        return partInfo.name
-      } catch (error) {
-        return `零件 #${partId}`
-      }
-    }
-    
     // 更新项目条目
     const updateProjectItem = (item) => {
       // 重新计算项目进度和成本
@@ -506,7 +569,7 @@ export default {
       showPartSelector.value = true
     }
     
-    const onPartSelected = (selectedPart) => {
+    const onPartSelected = async (selectedPart) => {
       if (!currentSelectingItem.value || !selectedPart) return
       
       // 更新项目条目的零件ID
@@ -516,6 +579,9 @@ export default {
       if (currentSelectingItem.value.status === 'optional') {
         currentSelectingItem.value.status = 'needed'
       }
+      
+      // 加载选中零件的信息到缓存
+      await loadPartInfo(selectedPart.id)
       
       // 保存项目更新
       updateProjectItem(currentSelectingItem.value)
@@ -604,6 +670,8 @@ export default {
       showPartSelector,
       currentSelectingItem,
       toast,
+      partsCache,
+      imageErrors,
       filteredItems,
       getTemplateName,
       getTemplateItem,
@@ -611,7 +679,8 @@ export default {
       getNeededCount,
       getPurchasedCount,
       getStatusText,
-      getPartName,
+      getPartInfo,
+      onImageError,
       updateProjectItem,
       showPartSelection,
       onPartSelected,
@@ -1051,17 +1120,75 @@ export default {
   margin: 0 0 8px 0;
 }
 
-.part-details {
+/* 零件缩略图样式 */
+.part-thumbnail {
+  width: 60px;
+  height: 60px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
   display: flex;
-  justify-content: space-between;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.part-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: white;
+}
+
+.part-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+.part-placeholder svg {
+  width: 24px;
+  height: 24px;
+}
+
+/* 零件详情信息 */
+.part-details {
+  display: grid;
+  grid-template-columns: 60px 1fr;
+  gap: 12px;
   align-items: center;
   margin-bottom: 12px;
 }
 
+.part-detail-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
 .part-name {
   font-size: 16px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-primary);
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.part-category-tag {
+  font-size: 12px;
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  padding: 2px 6px;
+  border-radius: 3px;
+  align-self: flex-start;
+  font-weight: 500;
 }
 
 .view-part-btn {
@@ -1073,6 +1200,7 @@ export default {
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.2s ease;
+  align-self: flex-start;
 }
 
 .view-part-btn:hover {
@@ -1388,6 +1516,26 @@ export default {
   .toast-message {
     min-width: auto;
     max-width: none;
+  }
+  
+  /* 移动端零件详情布局调整 */
+  .part-details {
+    grid-template-columns: 50px 1fr;
+    gap: 10px;
+  }
+  
+  .part-thumbnail {
+    width: 50px;
+    height: 50px;
+  }
+  
+  .part-name {
+    font-size: 14px;
+  }
+  
+  .view-part-btn {
+    font-size: 11px;
+    padding: 3px 6px;
   }
 }
 

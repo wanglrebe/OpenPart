@@ -1,4 +1,3 @@
-<!-- portal/src/views/Search.vue -->
 <template>
   <div class="search-page">
     <!-- 头部搜索栏 -->
@@ -17,7 +16,7 @@
             />
           </div>
           
-          <ThemeToggle />  <!-- 确保 ThemeToggle 在这个位置 -->
+          <ThemeToggle />
         </div>
       </div>
     </header>
@@ -117,21 +116,43 @@
               :part="part"
               @favorite="onFavorite"
               @compare="onCompare"
+              @message="showMessage"
             />
           </div>
         </div>
       </div>
     </main>
+    
+    <!-- 消息提示组件 -->
+    <div v-if="message.show" class="message-overlay" @click="hideMessage">
+      <div class="message-toast" :class="message.type">
+        <div class="message-content">
+          <svg v-if="message.type === 'success'" class="message-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+          </svg>
+          <svg v-else-if="message.type === 'error'" class="message-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+          <svg v-else class="message-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span>{{ message.text }}</span>
+        </div>
+        <button v-if="message.action" class="message-action" @click="message.action.callback">
+          {{ message.action.text }}
+        </button>
+      </div>
+    </div>
   </div>
 </template>
 
 <script>
-import { ref, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import SearchBox from '../components/SearchBox.vue'
 import ThemeToggle from '../components/ThemeToggle.vue'
 import PartCard from '../components/PartCard.vue'
-import { partsAPI } from '../utils/api'
+import { partsAPI, favoritesManager, comparisonManager } from '../utils/api'
 
 export default {
   name: 'Search',
@@ -150,6 +171,14 @@ export default {
     const loading = ref(false)
     const searchQuery = ref('')
     const sortBy = ref('name')
+    
+    // 消息提示状态
+    const message = ref({
+      show: false,
+      type: 'info',
+      text: '',
+      action: null
+    })
     
     const filters = ref({
       category: ''
@@ -239,13 +268,32 @@ export default {
     // 收藏零件
     const onFavorite = (part) => {
       console.log('收藏零件:', part.name)
-      // TODO: 实现收藏功能
     }
     
     // 添加到对比
     const onCompare = (part) => {
       console.log('添加到对比:', part.name)
-      // TODO: 实现对比功能
+    }
+    
+    // 消息提示
+    const showMessage = (msg) => {
+      message.value = {
+        show: true,
+        type: msg.type || 'info',
+        text: msg.text,
+        action: msg.action || null
+      }
+      
+      // 3秒后自动隐藏（除非有操作按钮）
+      if (!msg.action) {
+        setTimeout(() => {
+          hideMessage()
+        }, 3000)
+      }
+    }
+    
+    const hideMessage = () => {
+      message.value.show = false
     }
     
     // 初始化搜索参数
@@ -280,13 +328,16 @@ export default {
       searchQuery,
       sortBy,
       filters,
+      message,
       searchParts,
       sortResults,
       applyFilters,
       onSearch,
       clearSearch,
       onFavorite,
-      onCompare
+      onCompare,
+      showMessage,
+      hideMessage
     }
   }
 }
@@ -337,10 +388,6 @@ export default {
   flex: 1;
   min-width: 300px;
   max-width: 500px;
-}
-
-.nav-right {
-  flex-shrink: 0;
 }
 
 /* 主要内容 */
@@ -506,6 +553,102 @@ export default {
   gap: 24px;
 }
 
+/* 消息提示样式 */
+.message-overlay {
+  position: fixed;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  animation: messageSlideIn 0.3s ease;
+}
+
+@keyframes messageSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.message-toast {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 16px 20px;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 300px;
+  max-width: 500px;
+}
+
+.message-toast.success {
+  border-color: #10b981;
+  background: color-mix(in srgb, #10b981 5%, var(--bg-card));
+}
+
+.message-toast.error {
+  border-color: #f43f5e;
+  background: color-mix(in srgb, #f43f5e 5%, var(--bg-card));
+}
+
+.message-toast.info {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 5%, var(--bg-card));
+}
+
+.message-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.message-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.message-toast.success .message-icon {
+  color: #10b981;
+}
+
+.message-toast.error .message-icon {
+  color: #f43f5e;
+}
+
+.message-toast.info .message-icon {
+  color: var(--primary);
+}
+
+.message-content span {
+  font-size: 14px;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+
+.message-action {
+  padding: 6px 12px;
+  font-size: 13px;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.message-action:hover {
+  background: var(--secondary);
+}
+
 /* 响应式设计 */
 @media (max-width: 1024px) {
   .container {
@@ -525,22 +668,22 @@ export default {
 
 @media (max-width: 768px) {
   .search-nav {
-    flex-wrap: nowrap; /* 改：不换行 */
-    gap: 12px; /* 改：减少间距 */
+    flex-wrap: nowrap;
+    gap: 12px;
   }
   
   .logo-link {
-    min-width: 80px; /* 新增：移动端logo最小宽度 */
+    min-width: 80px;
   }
   
   .search-box-container {
     order: 3;
     flex: 1 1 100%;
-    min-width: 200px; /* 新增：移动端搜索框最小宽度 */
+    min-width: 200px;
   }
   
   .logo {
-    font-size: 18px; /* 新增：移动端缩小logo */
+    font-size: 18px;
   }
   
   .results-header {
@@ -556,6 +699,17 @@ export default {
   
   .filters-sidebar {
     padding: 16px;
+  }
+  
+  .message-overlay {
+    left: 16px;
+    right: 16px;
+    transform: none;
+  }
+  
+  .message-toast {
+    min-width: auto;
+    max-width: none;
   }
 }
 

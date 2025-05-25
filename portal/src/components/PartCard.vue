@@ -1,3 +1,4 @@
+<!-- portal/src/components/PartCard.vue (更新版本 - 添加对比功能) -->
 <template>
   <div class="part-card" @click="goToDetail">
     <!-- 零件图片 -->
@@ -55,24 +56,42 @@
     
     <!-- 悬浮操作 -->
     <div class="part-actions">
-      <button class="action-btn" @click.stop="toggleFavorite" title="收藏">
+      <button 
+        class="action-btn"
+        :class="{ active: isFavorited }"
+        @click.stop="toggleFavorite" 
+        :title="isFavorited ? '取消收藏' : '收藏零件'"
+      >
         <svg class="action-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+          <path 
+            stroke-linecap="round" 
+            stroke-linejoin="round" 
+            stroke-width="2" 
+            :d="isFavorited ? 'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z' : 'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z'"
+            :fill="isFavorited ? 'currentColor' : 'none'"
+          />
         </svg>
       </button>
       
-      <button class="action-btn" @click.stop="addToCompare" title="添加到对比">
+      <button 
+        class="action-btn"
+        :class="{ active: isInComparison }"
+        @click.stop="toggleComparison" 
+        :title="isInComparison ? '从对比中移除' : '添加到对比'"
+      >
         <svg class="action-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
         </svg>
+        <span v-if="comparisonCount > 0" class="comparison-badge">{{ comparisonCount }}</span>
       </button>
     </div>
   </div>
 </template>
 
 <script>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { favoritesManager, comparisonManager } from '../utils/api'
 
 export default {
   name: 'PartCard',
@@ -82,11 +101,14 @@ export default {
       required: true
     }
   },
-  emits: ['favorite', 'compare'],
+  emits: ['favorite', 'compare', 'message'],
   setup(props, { emit }) {
     const router = useRouter()
     const showAllProperties = ref(false)
     const imageError = ref(false)
+    const isFavorited = ref(false)
+    const isInComparison = ref(false)
+    const comparisonCount = ref(0)
     
     // 显示的属性（限制显示数量）
     const displayProperties = computed(() => {
@@ -104,6 +126,12 @@ export default {
       return Math.max(0, Object.keys(props.part.properties).length - 3)
     })
     
+    const updateStatus = () => {
+      isFavorited.value = favoritesManager.isFavorited(props.part.id)
+      isInComparison.value = comparisonManager.isInComparison(props.part.id)
+      comparisonCount.value = comparisonManager.getComparisonCount()
+    }
+    
     const goToDetail = () => {
       router.push({
         name: 'Detail',
@@ -116,13 +144,72 @@ export default {
     }
     
     const toggleFavorite = () => {
-      emit('favorite', props.part)
-      // TODO: 实现收藏功能
+      const result = favoritesManager.toggleFavorite(props.part)
+      
+      if (result.success) {
+        updateStatus()
+        emit('favorite', props.part, result.action === 'add')
+        
+        // 只有当有具体消息时才显示
+        if (result.message && result.message.trim()) {
+          emit('message', { 
+            type: 'success', 
+            text: result.message 
+          })
+        }
+      } else if (result.message && result.message.trim()) {
+        emit('message', { 
+          type: 'error', 
+          text: result.message 
+        })
+      }
     }
     
-    const addToCompare = () => {
-      emit('compare', props.part)
-      // TODO: 实现对比功能
+    const toggleComparison = () => {
+      let result
+      
+      if (isInComparison.value) {
+        result = comparisonManager.removeFromComparison(props.part.id)
+      } else {
+        result = comparisonManager.addToComparison(props.part)
+      }
+      
+      if (result.success) {
+        updateStatus()
+        emit('compare', props.part, !isInComparison.value)
+        
+        // 显示操作结果消息
+        if (result.message && result.message.trim()) {
+          emit('message', { 
+            type: 'success', 
+            text: result.message
+          })
+        }
+        
+        // 如果对比列表有足够的零件，可以提示用户去对比
+        if (!isInComparison.value && result.count >= 2) {
+          setTimeout(() => {
+            emit('message', { 
+              type: 'info', 
+              text: `对比列表已有${result.count}个零件，可以开始对比了！`,
+              action: {
+                text: '立即对比',
+                callback: () => {
+                  const compareUrl = comparisonManager.getComparisonUrl()
+                  if (compareUrl) {
+                    router.push(compareUrl)
+                  }
+                }
+              }
+            })
+          }, 1000)
+        }
+      } else if (result.message && result.message.trim()) {
+        emit('message', { 
+          type: 'error', 
+          text: result.message 
+        })
+      }
     }
     
     const formatTime = (timeString) => {
@@ -142,15 +229,34 @@ export default {
       return date.toLocaleDateString('zh-CN')
     }
     
+    // 监听存储变化，更新状态
+    const handleStorageChange = (e) => {
+      if (e.key === 'openpart_favorites' || e.key === 'openpart_comparison') {
+        updateStatus()
+      }
+    }
+    
+    onMounted(() => {
+      updateStatus()
+      window.addEventListener('storage', handleStorageChange)
+    })
+    
+    onUnmounted(() => {
+      window.removeEventListener('storage', handleStorageChange)
+    })
+    
     return {
       showAllProperties,
       imageError,
       displayProperties,
       hiddenPropertiesCount,
+      isFavorited,
+      isInComparison,
+      comparisonCount,
       goToDetail,
       onImageError,
       toggleFavorite,
-      addToCompare,
+      toggleComparison,
       formatTime
     }
   }
@@ -191,21 +297,20 @@ export default {
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  border-radius: 12px 12px 0 0; /* 只有顶部圆角 */
+  border-radius: 12px 12px 0 0;
 }
 
 .part-img {
   width: 100%;
   height: 100%;
-  object-fit: contain; /* 改为 contain，显示完整图片 */
-  background: white; /* 添加白色背景，避免透明图片问题 */
+  object-fit: contain;
+  background: white;
   transition: transform 0.3s ease;
 }
 
 .part-card:hover .part-img {
-  transform: scale(1.02); /* 减小放大倍数，避免 contain 模式下的问题 */
+  transform: scale(1.02);
 }
-
 
 .part-placeholder {
   display: flex;
@@ -339,6 +444,7 @@ export default {
 }
 
 .action-btn {
+  position: relative;
   width: 32px;
   height: 32px;
   border: none;
@@ -363,9 +469,35 @@ export default {
   transform: scale(1.1);
 }
 
+.action-btn.active {
+  background: var(--primary);
+  color: white;
+}
+
+.action-btn.active:hover {
+  background: color-mix(in srgb, var(--primary) 90%, black);
+}
+
 .action-icon {
   width: 16px;
   height: 16px;
+}
+
+.comparison-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  background: #f43f5e;
+  color: white;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--bg-card);
 }
 
 /* 响应式设计 */

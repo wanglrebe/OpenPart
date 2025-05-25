@@ -102,18 +102,95 @@
               
               <!-- 操作按钮 -->
               <div class="action-buttons">
-                <button class="btn btn-primary" @click="toggleFavorite">
+                <button 
+                  class="btn btn-primary"
+                  :class="{ active: isFavorited }"
+                  @click="toggleFavorite"
+                >
                   <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                    <path 
+                      stroke-linecap="round" 
+                      stroke-linejoin="round" 
+                      stroke-width="2" 
+                      :d="isFavorited ? 'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z' : 'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z'"
+                      :fill="isFavorited ? 'currentColor' : 'none'"
+                    />
                   </svg>
-                  收藏零件
+                  {{ isFavorited ? '已收藏' : '收藏零件' }}
                 </button>
-                <button class="btn btn-outline" @click="addToCompare">
+                
+                <button 
+                  class="btn"
+                  :class="isInComparison ? 'btn-secondary' : 'btn-outline'"
+                  @click="toggleComparison"
+                >
                   <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                   </svg>
-                  添加到对比
+                  {{ isInComparison ? '从对比中移除' : '添加到对比' }}
+                  <span v-if="comparisonCount > 0" class="comparison-count">({{ comparisonCount }})</span>
                 </button>
+                
+                <!-- 对比建议按钮 -->
+                <button 
+                  v-if="comparisonSuggestions.length > 0"
+                  class="btn btn-outline"
+                  @click="showSuggestions = !showSuggestions"
+                >
+                  <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  智能对比建议
+                </button>
+                
+                <!-- 立即对比按钮 -->
+                <button 
+                  v-if="comparisonCount >= 2"
+                  class="btn btn-primary comparison-cta"
+                  @click="goToComparison"
+                >
+                  <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
+                  立即对比 ({{ comparisonCount }}个零件)
+                </button>
+              </div>
+              
+              <!-- 对比建议面板 -->
+              <div v-if="showSuggestions && comparisonSuggestions.length > 0" class="comparison-suggestions">
+                <h4>对比建议</h4>
+                <p class="suggestions-desc">基于当前零件为您推荐相似的零件进行对比：</p>
+                
+                <div class="suggestions-grid">
+                  <div 
+                    v-for="suggestion in comparisonSuggestions" 
+                    :key="suggestion.id"
+                    class="suggestion-card"
+                    @click="addToComparisonAndGo(suggestion)"
+                  >
+                    <div class="suggestion-image">
+                      <img 
+                        v-if="suggestion.image_url" 
+                        :src="suggestion.image_url" 
+                        :alt="suggestion.name"
+                      />
+                      <div v-else class="suggestion-placeholder">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                        </svg>
+                      </div>
+                    </div>
+                    <div class="suggestion-info">
+                      <h5>{{ suggestion.name }}</h5>
+                      <span v-if="suggestion.category">{{ suggestion.category }}</span>
+                    </div>
+                    <button class="suggestion-add-btn">
+                      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
             
@@ -175,7 +252,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ThemeToggle from '../components/ThemeToggle.vue'
-import { partsAPI } from '../utils/api'
+import { partsAPI, favoritesManager, comparisonManager } from '../utils/api'
 
 export default {
   name: 'Detail',
@@ -197,6 +274,22 @@ export default {
     const error = ref('')
     const imageError = ref(false)
     
+    // 新增：收藏和对比状态
+    const isFavorited = ref(false)
+    const isInComparison = ref(false)
+    const comparisonCount = ref(0)
+    const comparisonSuggestions = ref([])
+    const showSuggestions = ref(false)
+    const showImageModal = ref(false)
+    
+    const updateStatus = () => {
+      if (part.value) {
+        isFavorited.value = favoritesManager.isFavorited(part.value.id)
+        isInComparison.value = comparisonManager.isInComparison(part.value.id)
+      }
+      comparisonCount.value = comparisonManager.getComparisonCount()
+    }
+    
     const loadPart = async () => {
       loading.value = true
       error.value = ''
@@ -204,12 +297,84 @@ export default {
       try {
         const response = await partsAPI.getPart(props.id)
         part.value = response.data
+        updateStatus()
+        
+        // 加载对比建议
+        loadComparisonSuggestions()
       } catch (err) {
         console.error('加载零件详情失败:', err)
         error.value = '零件不存在或加载失败'
       }
       
       loading.value = false
+    }
+    
+    const loadComparisonSuggestions = async () => {
+      try {
+        const response = await partsAPI.getComparisonSuggestions(props.id, 4)
+        comparisonSuggestions.value = response.data
+      } catch (err) {
+        console.error('加载对比建议失败:', err)
+        comparisonSuggestions.value = []
+      }
+    }
+    
+    const toggleFavorite = () => {
+      if (!part.value) return
+      
+      const result = favoritesManager.toggleFavorite(part.value)
+      if (result.success) {
+        updateStatus()
+        // 可以添加消息提示
+        console.log(result.message)
+      } else {
+        console.error(result.message)
+      }
+    }
+    
+    const toggleComparison = () => {
+      if (!part.value) return
+      
+      let result
+      if (isInComparison.value) {
+        result = comparisonManager.removeFromComparison(part.value.id)
+      } else {
+        result = comparisonManager.addToComparison(part.value)
+      }
+      
+      if (result.success) {
+        updateStatus()
+        console.log(result.message || (isInComparison.value ? '已从对比中移除' : '已添加到对比列表'))
+      } else {
+        console.error(result.message)
+      }
+    }
+    
+    const goToComparison = () => {
+      const compareUrl = comparisonManager.getComparisonUrl()
+      if (compareUrl) {
+        router.push(compareUrl)
+      }
+    }
+    
+    const addToComparisonAndGo = (suggestion) => {
+      // 添加当前零件到对比（如果还没有）
+      if (!isInComparison.value) {
+        comparisonManager.addToComparison(part.value)
+      }
+      
+      // 添加建议的零件到对比
+      const result = comparisonManager.addToComparison(suggestion)
+      
+      if (result.success) {
+        // 直接跳转到对比页面
+        const compareUrl = comparisonManager.getComparisonUrl()
+        if (compareUrl) {
+          router.push(compareUrl)
+        }
+      } else {
+        console.error(result.message)
+      }
     }
     
     const goBack = () => {
@@ -224,30 +389,13 @@ export default {
       imageError.value = true
     }
     
-    const toggleFavorite = () => {
-      console.log('收藏零件:', part.value.name)
-      // TODO: 实现收藏功能
-    }
-    
-    const addToCompare = () => {
-      console.log('添加到对比:', part.value.name)
-      // TODO: 实现对比功能
+    const closeImageModal = (event) => {
+      showImageModal.value = false
     }
     
     const formatDate = (dateString) => {
       if (!dateString) return ''
       return new Date(dateString).toLocaleString('zh-CN')
-    }
-    
-    onMounted(() => {
-      loadPart()
-    })
-
-    const showImageModal = ref(false)
-
-    const closeImageModal = (event) => {
-      // 如果点击的是背景或关闭按钮，关闭模态框
-      showImageModal.value = false
     }
     
     // 键盘事件监听
@@ -257,13 +405,22 @@ export default {
       }
     }
     
+    // 监听存储变化，更新状态
+    const handleStorageChange = (e) => {
+      if (e.key === 'openpart_favorites' || e.key === 'openpart_comparison') {
+        updateStatus()
+      }
+    }
+    
     onMounted(() => {
       document.addEventListener('keydown', handleKeydown)
+      window.addEventListener('storage', handleStorageChange)
       loadPart()
     })
     
     onUnmounted(() => {
       document.removeEventListener('keydown', handleKeydown)
+      window.removeEventListener('storage', handleStorageChange)
     })
     
     return {
@@ -271,14 +428,21 @@ export default {
       loading,
       error,
       imageError,
+      isFavorited,
+      isInComparison,
+      comparisonCount,
+      comparisonSuggestions,
+      showSuggestions,
+      showImageModal,
       loadPart,
+      toggleFavorite,
+      toggleComparison,
+      goToComparison,
+      addToComparisonAndGo,
       goBack,
       onImageError,
-      toggleFavorite,
-      addToCompare,
-      formatDate,
-      showImageModal,
-      closeImageModal
+      closeImageModal,
+      formatDate
     }
   }
 }
@@ -405,6 +569,215 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.btn.active {
+  background: var(--secondary) !important;
+  color: white;
+  border-color: var(--secondary);
+}
+
+.comparison-count {
+  margin-left: 4px;
+  font-weight: 600;
+  color: var(--secondary);
+}
+
+.btn.btn-secondary .comparison-count {
+  color: white;
+}
+
+.comparison-cta {
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  border: none;
+  color: white;
+  animation: pulse-glow 2s infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 0 rgba(100, 116, 139, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(100, 116, 139, 0.4);
+  }
+}
+
+/* 对比建议面板 */
+.comparison-suggestions {
+  margin-top: 24px;
+  padding: 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.comparison-suggestions h4 {
+  margin: 0 0 8px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.suggestions-desc {
+  margin: 0 0 16px 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.suggestions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.suggestion-card {
+  position: relative;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.suggestion-card:hover {
+  background: var(--bg-primary);
+  border-color: var(--primary);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.suggestion-image {
+  width: 40px;
+  height: 40px;
+  background: var(--bg-card);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.suggestion-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.suggestion-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+.suggestion-placeholder svg {
+  width: 20px;
+  height: 20px;
+}
+
+.suggestion-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.suggestion-info h5 {
+  margin: 0 0 2px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.suggestion-info span {
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.suggestion-add-btn {
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 50%;
+  background: var(--primary);
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.suggestion-add-btn:hover {
+  background: var(--secondary);
+  transform: scale(1.1);
+}
+
+.suggestion-add-btn svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* 响应式设计 */
+@media (max-width: 1024px) {
+  .action-buttons {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  
+  .comparison-cta {
+    flex: 1 1 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  .action-buttons {
+    flex-direction: column;
+  }
+  
+  .suggestions-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .suggestion-card {
+    padding: 10px;
+    gap: 10px;
+  }
+  
+  .suggestion-image {
+    width: 36px;
+    height: 36px;
+  }
+  
+  .comparison-suggestions {
+    padding: 16px;
+    margin-top: 16px;
+  }
 }
 
 .btn-icon {

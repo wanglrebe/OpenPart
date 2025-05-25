@@ -1,9 +1,13 @@
+// portal/src/router/index.js (更新版本 - 添加项目清单页面)
 import { createRouter, createWebHistory } from 'vue-router'
 
 // 路由组件
 import Home from '../views/Home.vue'
 import Search from '../views/Search.vue'
 import Detail from '../views/Detail.vue'
+import Compare from '../views/Compare.vue'
+import Favorites from '../views/Favorites.vue'
+import Projects from '../views/Projects.vue'  // 新增
 
 const routes = [
   {
@@ -29,6 +33,40 @@ const routes = [
     props: true,
     meta: {
       title: '零件详情 - OpenPart'
+    }
+  },
+  {
+    path: '/compare',
+    name: 'Compare',
+    component: Compare,
+    meta: {
+      title: '零件对比 - OpenPart'
+    },
+    beforeEnter: (to, from, next) => {
+      // 检查是否有要对比的零件ID
+      const ids = to.query.ids
+      if (!ids || (typeof ids === 'string' && ids.split(',').length < 1)) {
+        // 如果没有零件ID，重定向到首页
+        next('/')
+      } else {
+        next()
+      }
+    }
+  },
+  {
+    path: '/favorites',
+    name: 'Favorites',
+    component: Favorites,
+    meta: {
+      title: '我的收藏 - OpenPart'
+    }
+  },
+  {
+    path: '/projects',  // 新增项目清单页面路由
+    name: 'Projects',
+    component: Projects,
+    meta: {
+      title: '项目清单 - OpenPart'
     }
   },
   {

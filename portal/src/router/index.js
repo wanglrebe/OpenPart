@@ -1,4 +1,4 @@
-// portal/src/router/index.js (更新版本 - 添加项目清单页面)
+// portal/src/router/index.js (更新版本 - 添加项目详情页面)
 import { createRouter, createWebHistory } from 'vue-router'
 
 // 路由组件
@@ -7,7 +7,8 @@ import Search from '../views/Search.vue'
 import Detail from '../views/Detail.vue'
 import Compare from '../views/Compare.vue'
 import Favorites from '../views/Favorites.vue'
-import Projects from '../views/Projects.vue'  // 新增
+import Projects from '../views/Projects.vue'
+import ProjectDetail from '../views/ProjectDetail.vue'  // 新增
 
 const routes = [
   {
@@ -62,11 +63,20 @@ const routes = [
     }
   },
   {
-    path: '/projects',  // 新增项目清单页面路由
+    path: '/projects',
     name: 'Projects',
     component: Projects,
     meta: {
       title: '项目清单 - OpenPart'
+    }
+  },
+  {
+    path: '/projects/:id',  // 新增项目详情页面路由
+    name: 'ProjectDetail',
+    component: ProjectDetail,
+    props: true,
+    meta: {
+      title: '项目详情 - OpenPart'
     }
   },
   {

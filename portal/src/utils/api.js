@@ -371,6 +371,42 @@ class FavoritesManager {
 // 导出收藏管理器实例
 export const favoritesManager = new FavoritesManager()
 
+// 零件缓存管理器
+class PartsCacheManager {
+  constructor() {
+    this.cache = new Map()
+  }
+  
+  // 获取零件信息
+  async getPartInfo(partId) {
+    if (this.cache.has(partId)) {
+      return this.cache.get(partId)
+    }
+    
+    try {
+      const response = await partsAPI.getPart(partId)
+      const partInfo = response.data
+      this.cache.set(partId, partInfo)
+      return partInfo
+    } catch (error) {
+      console.error('获取零件信息失败:', error)
+      return { id: partId, name: `零件 #${partId}`, category: '', description: '' }
+    }
+  }
+  
+  // 预加载零件信息
+  async preloadParts(partIds) {
+    const promises = partIds
+      .filter(id => !this.cache.has(id))
+      .map(id => this.getPartInfo(id))
+    
+    await Promise.all(promises)
+  }
+}
+
+// 导出零件缓存管理器实例
+export const partsCacheManager = new PartsCacheManager()
+
 export const statsAPI = {
   // 获取实时统计
   async getRealTimeStats() {

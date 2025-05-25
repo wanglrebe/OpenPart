@@ -48,6 +48,7 @@
             <!-- 左侧：图片和基本信息 -->
             <div class="detail-left">
               <div class="part-image-container">
+              <div class="image-wrapper" @click="showImageModal = true">
                 <img 
                   v-if="part.image_url && !imageError" 
                   :src="part.image_url" 
@@ -61,7 +62,43 @@
                   </svg>
                   <p>暂无图片</p>
                 </div>
+                
+                <!-- 放大图标 -->
+                <div v-if="part.image_url && !imageError" class="zoom-overlay">
+                  <svg class="zoom-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+                  </svg>
+                </div>
               </div>
+            </div>
+
+            <!-- 图片放大模态框 -->
+            <div 
+              v-if="showImageModal" 
+              class="image-modal-overlay"
+              @click="closeImageModal"
+            >
+              <div class="image-modal" @click.stop>
+                <button class="modal-close" @click="closeImageModal">
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+                
+                <div class="modal-image-container">
+                  <img 
+                    :src="part.image_url" 
+                    :alt="part.name"
+                    class="modal-image"
+                  />
+                </div>
+                
+                <div class="modal-info">
+                  <h3>{{ part.name }}</h3>
+                  <p v-if="part.category">{{ part.category }}</p>
+                </div>
+              </div>
+            </div>
               
               <!-- 操作按钮 -->
               <div class="action-buttons">
@@ -135,7 +172,7 @@
 </template>
 
 <script>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ThemeToggle from '../components/ThemeToggle.vue'
 import { partsAPI } from '../utils/api'
@@ -205,6 +242,29 @@ export default {
     onMounted(() => {
       loadPart()
     })
+
+    const showImageModal = ref(false)
+
+    const closeImageModal = (event) => {
+      // 如果点击的是背景或关闭按钮，关闭模态框
+      showImageModal.value = false
+    }
+    
+    // 键盘事件监听
+    const handleKeydown = (event) => {
+      if (event.key === 'Escape' && showImageModal.value) {
+        closeImageModal()
+      }
+    }
+    
+    onMounted(() => {
+      document.addEventListener('keydown', handleKeydown)
+      loadPart()
+    })
+    
+    onUnmounted(() => {
+      document.removeEventListener('keydown', handleKeydown)
+    })
     
     return {
       part,
@@ -216,7 +276,9 @@ export default {
       onImageError,
       toggleFavorite,
       addToCompare,
-      formatDate
+      formatDate,
+      showImageModal,
+      closeImageModal
     }
   }
 }
@@ -433,6 +495,123 @@ export default {
   margin-bottom: 32px;
 }
 
+.image-wrapper {
+  position: relative;
+  cursor: pointer;
+}
+
+.zoom-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.image-wrapper:hover .zoom-overlay {
+  opacity: 1;
+}
+
+.zoom-icon {
+  width: 32px;
+  height: 32px;
+  color: white;
+}
+
+/* 模态框样式 */
+.image-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+  backdrop-filter: blur(8px);
+}
+
+.image-modal {
+  position: relative;
+  max-width: 90vw;
+  max-height: 90vh;
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+[data-theme="dark"] .image-modal {
+  background: var(--bg-card);
+}
+
+.modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.5);
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+  transition: background-color 0.2s ease;
+}
+
+.modal-close:hover {
+  background: rgba(0, 0, 0, 0.7);
+}
+
+.modal-close svg {
+  width: 16px;
+  height: 16px;
+}
+
+.modal-image-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-height: 80vh;
+}
+
+.modal-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.modal-info {
+  padding: 16px 20px;
+  background: var(--bg-card);
+  border-top: 1px solid var(--border-color);
+}
+
+.modal-info h3 {
+  margin: 0 0 4px 0;
+  font-size: 18px;
+  color: var(--text-primary);
+}
+
+.modal-info p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
 /* 响应式设计 */
 @media (max-width: 1024px) {
   .detail-grid {
@@ -500,6 +679,17 @@ export default {
 @keyframes spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 768px) {
+  .image-modal {
+    max-width: 95vw;
+    max-height: 95vh;
+  }
+  
+  .modal-image-container {
+    max-height: 75vh;
   }
 }
 </style>

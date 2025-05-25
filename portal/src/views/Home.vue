@@ -5,8 +5,8 @@
       <div class="container">
         <div class="nav">
           <div class="logo">
-            <h1>OpenPart</h1>
-            <span class="tagline">零件搜索门户</span>
+            <h1>{{ config.title }}</h1>
+            <span class="tagline">{{ config.subtitle }}</span>
           </div>
           
           <div class="nav-actions">
@@ -22,11 +22,11 @@
         <div class="container container-sm">
           <div class="hero-content">
             <h2 class="hero-title">
-              发现完美的
-              <span class="highlight">电子零件</span>
+              {{ config.hero.title }}
+              <span class="highlight">{{ config.hero.highlight }}</span>
             </h2>
             <p class="hero-subtitle">
-              搜索数千个电子元件的详细规格参数，找到最适合您项目的零件
+              {{ config.hero.subtitle }}
             </p>
             
             <!-- 搜索框 -->
@@ -34,7 +34,7 @@
               <SearchBox 
                 :size="'large'"
                 :auto-focus="true"
-                placeholder="搜索零件型号、参数或分类..."
+                :placeholder="config.hero.searchPlaceholder"
                 @search="onSearch"
               />
               
@@ -42,7 +42,7 @@
               <div class="popular-searches">
                 <span class="popular-label">热门搜索:</span>
                 <button 
-                  v-for="tag in popularTags" 
+                  v-for="tag in config.popularTags" 
                   :key="tag"
                   class="popular-tag"
                   @click="searchTag(tag)"
@@ -60,15 +60,15 @@
         <div class="container">
           <div class="stats-grid">
             <div class="stat-item">
-              <div class="stat-number">{{ stats.totalParts }}</div>
+              <div class="stat-number">{{ displayStats.totalParts }}</div>
               <div class="stat-label">零件总数</div>
             </div>
             <div class="stat-item">
-              <div class="stat-number">{{ stats.totalCategories }}</div>
+              <div class="stat-number">{{ displayStats.totalCategories }}</div>
               <div class="stat-label">分类数量</div>
             </div>
             <div class="stat-item">
-              <div class="stat-number">{{ stats.searchCount }}</div>
+              <div class="stat-number">{{ displayStats.searchCount }}</div>
               <div class="stat-label">搜索次数</div>
             </div>
           </div>
@@ -102,29 +102,22 @@
     <footer class="footer">
       <div class="container">
         <div class="footer-content">
-          <div class="footer-section">
-            <h5>OpenPart</h5>
-            <p>开源零件数据管理系统</p>
-          </div>
-          <div class="footer-section">
-            <h5>功能</h5>
-            <ul>
-              <li>零件搜索</li>
-              <li>参数对比</li>
-              <li>分类浏览</li>
-            </ul>
-          </div>
-          <div class="footer-section">
-            <h5>关于</h5>
-            <ul>
-              <li>项目介绍</li>
-              <li>使用帮助</li>
-              <li>GitHub</li>
+          <div 
+            v-for="section in config.footer.sections" 
+            :key="section.title"
+            class="footer-section"
+          >
+            <h5>{{ section.title }}</h5>
+            <p v-if="section.content">{{ section.content }}</p>
+            <ul v-if="section.links">
+              <li v-for="link in section.links" :key="link.text">
+                <a :href="link.url">{{ link.text }}</a>
+              </li>
             </ul>
           </div>
         </div>
         <div class="footer-bottom">
-          <p>&copy; 2024 OpenPart. 开源项目.</p>
+          <p>{{ config.footer.copyright }}</p>
         </div>
       </div>
     </footer>
@@ -132,11 +125,12 @@
 </template>
 
 <script>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import ThemeToggle from '../components/ThemeToggle.vue'
 import SearchBox from '../components/SearchBox.vue'
-import { partsAPI } from '../utils/api'
+import { partsAPI, statsAPI } from '../utils/api'
+import { siteConfig } from '../config/site'
 
 export default {
   name: 'Home',
@@ -146,16 +140,26 @@ export default {
   },
   setup() {
     const router = useRouter()
+    const config = siteConfig
     const categories = ref([])
-    const stats = ref({
+    const realTimeStats = ref({
       totalParts: 0,
       totalCategories: 0,
-      searchCount: '1000+'
+      searchCount: '0'
     })
     
-    const popularTags = [
-      'Arduino', '电阻', '5V', 'LED', '微控制器'
-    ]
+    // 显示的统计数据
+    const displayStats = computed(() => {
+      if (config.stats.enableRealTimeStats) {
+        return realTimeStats.value
+      } else {
+        return {
+          totalParts: realTimeStats.value.totalParts || 0,
+          totalCategories: realTimeStats.value.totalCategories || 0,
+          searchCount: config.stats.searchCountDisplay
+        }
+      }
+    })
     
     const loadData = async () => {
       try {
@@ -163,10 +167,16 @@ export default {
         const categoriesResponse = await partsAPI.getCategories()
         categories.value = categoriesResponse.data
         
-        // 获取零件统计
-        const partsResponse = await partsAPI.getParts({ limit: 1000 })
-        stats.value.totalParts = partsResponse.data.length
-        stats.value.totalCategories = categories.value.length
+        // 获取统计数据
+        if (config.stats.enableRealTimeStats) {
+          const stats = await statsAPI.getRealTimeStats()
+          realTimeStats.value = stats
+        } else {
+          // 只获取基本数据用于显示
+          const partsResponse = await partsAPI.getParts({ limit: 100 })
+          realTimeStats.value.totalParts = partsResponse.data.length
+          realTimeStats.value.totalCategories = categories.value.length
+        }
         
       } catch (error) {
         console.error('加载数据失败:', error)
@@ -174,6 +184,9 @@ export default {
     }
     
     const onSearch = (query) => {
+      // 增加搜索计数
+      statsAPI.incrementSearchCount()
+      
       router.push({
         name: 'Search',
         query: { q: query }
@@ -181,6 +194,8 @@ export default {
     }
     
     const searchTag = (tag) => {
+      statsAPI.incrementSearchCount()
+      
       router.push({
         name: 'Search',
         query: { q: tag }
@@ -199,9 +214,9 @@ export default {
     })
     
     return {
+      config,
       categories,
-      stats,
-      popularTags,
+      displayStats,
       onSearch,
       searchTag,
       searchCategory
@@ -265,7 +280,8 @@ export default {
     color-mix(in srgb, var(--secondary) 3%, var(--bg-primary))
   );
   position: relative;
-  overflow: hidden;
+  overflow: visible; /* 改为visible，允许内容溢出 */
+  z-index: 10; /* 设置较高的z-index */
 }
 
 .hero-section::before {
@@ -362,6 +378,8 @@ export default {
 .stats-section {
   padding: 60px 0;
   background: var(--bg-card);
+  position: relative;
+  z-index: 1; /* 确保统计区域的z-index较低 */
 }
 
 .stats-grid {

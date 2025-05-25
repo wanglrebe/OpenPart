@@ -17,7 +17,7 @@
             />
           </div>
           
-          <ThemeToggle />
+          <ThemeToggle />  <!-- 确保 ThemeToggle 在这个位置 -->
         </div>
       </div>
     </header>
@@ -298,6 +298,11 @@ export default {
   background: var(--bg-primary);
 }
 
+/* 隐藏搜索提示 */
+.search-box-container :deep(.search-tips) {
+  display: none !important;
+}
+
 /* 搜索头部 */
 .search-header {
   background: var(--bg-card);
@@ -312,12 +317,13 @@ export default {
 .search-nav {
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: 16px;
 }
 
 .logo-link {
   text-decoration: none;
   flex-shrink: 0;
+  min-width: 100px;
 }
 
 .logo {
@@ -329,7 +335,12 @@ export default {
 
 .search-box-container {
   flex: 1;
-  max-width: 600px;
+  min-width: 300px;
+  max-width: 500px;
+}
+
+.nav-right {
+  flex-shrink: 0;
 }
 
 /* 主要内容 */
@@ -514,13 +525,22 @@ export default {
 
 @media (max-width: 768px) {
   .search-nav {
-    flex-wrap: wrap;
-    gap: 16px;
+    flex-wrap: nowrap; /* 改：不换行 */
+    gap: 12px; /* 改：减少间距 */
+  }
+  
+  .logo-link {
+    min-width: 80px; /* 新增：移动端logo最小宽度 */
   }
   
   .search-box-container {
     order: 3;
     flex: 1 1 100%;
+    min-width: 200px; /* 新增：移动端搜索框最小宽度 */
+  }
+  
+  .logo {
+    font-size: 18px; /* 新增：移动端缩小logo */
   }
   
   .results-header {
@@ -536,6 +556,20 @@ export default {
   
   .filters-sidebar {
     padding: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .search-nav {
+    gap: 8px;
+  }
+  
+  .search-box-container {
+    min-width: 150px;
+  }
+  
+  .logo {
+    font-size: 16px;
   }
 }
 </style>

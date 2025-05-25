@@ -60,10 +60,34 @@
               {{ formatDate(scope.row.created_at) }}
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="200">
+          <!-- 在零件表格中添加图片列，在操作列之前添加： -->
+          <el-table-column label="图片" width="100">
+            <template #default="scope">
+              <div class="part-image-cell">
+                <img 
+                  v-if="scope.row.image_url" 
+                  :src="scope.row.image_url" 
+                  class="part-thumbnail"
+                  @click="previewImage(scope.row.image_url)"
+                />
+                <div v-else class="no-image-placeholder">
+                  <el-icon><Picture /></el-icon>
+                </div>
+              </div>
+            </template>
+          </el-table-column>
+          <!-- 在操作列中添加图片管理按钮： -->
+          <el-table-column label="操作" width="250">
             <template #default="scope">
               <el-button size="small" @click="editPart(scope.row)">
                 编辑
+              </el-button>
+              <el-button 
+                size="small" 
+                type="primary"
+                @click="showImageUpload(scope.row)"
+              >
+                {{ scope.row.image_url ? '更换图片' : '上传图片' }}
               </el-button>
               <el-button 
                 size="small" 
@@ -127,22 +151,77 @@
         </el-button>
       </template>
     </el-dialog>
+    <!-- 在对话框后添加图片上传对话框： -->
+    <el-dialog
+      title="零件图片管理"
+      v-model="showImageDialog"
+      width="500px"
+    >
+      <div class="image-upload-container">
+        <div v-if="currentPart?.image_url" class="current-image">
+          <h4>当前图片</h4>
+          <img :src="currentPart.image_url" class="current-image-preview" />
+          <el-button 
+            type="danger" 
+            size="small" 
+            @click="deleteImage"
+            :loading="deleting"
+          >
+            删除图片
+          </el-button>
+        </div>
+        
+        <div class="upload-section">
+          <h4>{{ currentPart?.image_url ? '更换图片' : '上传图片' }}</h4>
+          <el-upload
+            class="image-uploader"
+            :action="`/api/admin/upload/upload/${currentPart?.id}`"
+            :headers="uploadHeaders"
+            :show-file-list="false"
+            :on-success="handleUploadSuccess"
+            :on-error="handleUploadError"
+            :before-upload="beforeImageUpload"
+            accept="image/*"
+          >
+            <div class="upload-area">
+              <el-icon class="upload-icon"><Plus /></el-icon>
+              <div class="upload-text">点击上传图片</div>
+              <div class="upload-hint">支持 JPG、PNG、GIF、WebP 格式，最大 5MB</div>
+            </div>
+          </el-upload>
+        </div>
+      </div>
+    </el-dialog>
+    <!-- 图片预览对话框 -->
+    <el-dialog
+      title="图片预览"
+      v-model="showPreviewDialog"
+      width="600px"
+    >
+      <div class="image-preview-container">
+        <img :src="previewImageUrl" class="preview-image" />
+      </div>
+    </el-dialog>
   </div>
 </template>
 
 <script>
 import { ref, reactive, onMounted } from 'vue'
-import { Plus, Search } from '@element-plus/icons-vue'
+import { Plus, Search, Picture } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import NavBar from '../components/NavBar.vue'
 import { partsAPI } from '../utils/api'
+import { auth } from '../utils/auth'  // 添加这行
+import axios from 'axios'  // 如果还没有的话也添加这行
 
 export default {
   name: 'PartsAdmin',
   components: {
     NavBar,
     Plus,
-    Search
+    Search,
+    Plus,
+    Picture
   },
   setup() {
     const parts = ref([])
@@ -341,6 +420,75 @@ export default {
     onMounted(() => {
       loadParts()
     })
+
+    // 在 setup() 中添加数据：
+    const showImageDialog = ref(false)
+    const showPreviewDialog = ref(false)
+    const currentPart = ref(null)
+    const previewImageUrl = ref('')
+    const deleting = ref(false)
+    
+    // 添加上传headers
+    const uploadHeaders = {
+      'Authorization': `Bearer ${auth.getToken()}`
+    }
+    
+    // 添加方法：
+    const showImageUpload = (part) => {
+      currentPart.value = part
+      showImageDialog.value = true
+    }
+    
+    const previewImage = (imageUrl) => {
+      previewImageUrl.value = imageUrl
+      showPreviewDialog.value = true
+    }
+    
+    const beforeImageUpload = (file) => {
+      const isValidType = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'].includes(file.type)
+      const isLt5M = file.size / 1024 / 1024 < 5
+    
+      if (!isValidType) {
+        ElMessage.error('只能上传 JPG、PNG、GIF、WebP 格式的图片!')
+        return false
+      }
+      if (!isLt5M) {
+        ElMessage.error('图片大小不能超过 5MB!')
+        return false
+      }
+      return true
+    }
+    
+    const handleUploadSuccess = (response) => {
+      ElMessage.success('图片上传成功')
+      currentPart.value.image_url = response.image_url
+      showImageDialog.value = false
+      loadParts() // 刷新列表
+    }
+    
+    const handleUploadError = (error) => {
+      console.error('上传失败:', error)
+      ElMessage.error('图片上传失败')
+    }
+    
+    const deleteImage = async () => {
+      try {
+        deleting.value = true
+        await axios.delete(`/api/admin/upload/delete/${currentPart.value.id}`, {
+          headers: { Authorization: `Bearer ${auth.getToken()}` }
+        })
+        
+        ElMessage.success('图片删除成功')
+        currentPart.value.image_url = null
+        showImageDialog.value = false
+        loadParts()
+      } catch (error) {
+        ElMessage.error('删除失败')
+        console.error(error)
+      }
+      deleting.value = false
+    }
+
     
     return {
       parts,
@@ -368,7 +516,19 @@ export default {
       formatDate,
       handleSizeChange,
       handleCurrentChange,
-      handleDialogClose
+      handleDialogClose,
+      showImageDialog,
+      showPreviewDialog,
+      currentPart,
+      previewImageUrl,
+      deleting,
+      uploadHeaders,
+      showImageUpload,
+      previewImage,
+      beforeImageUpload,
+      handleUploadSuccess,
+      handleUploadError,
+      deleteImage
     }
   }
 }
@@ -406,5 +566,106 @@ export default {
 .pagination {
   margin-top: 20px;
   text-align: right;
+}
+
+.part-image-cell {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.part-thumbnail {
+  width: 50px;
+  height: 50px;
+  object-fit: cover;
+  border-radius: 4px;
+  cursor: pointer;
+  border: 1px solid #ddd;
+}
+
+.no-image-placeholder {
+  width: 50px;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f5f5f5;
+  border-radius: 4px;
+  color: #ccc;
+}
+
+.image-upload-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.current-image {
+  text-align: center;
+}
+
+.current-image h4 {
+  margin-bottom: 10px;
+  color: #303133;
+}
+
+.current-image-preview {
+  max-width: 200px;
+  max-height: 200px;
+  object-fit: contain;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  border: 1px solid #ddd;
+}
+
+.upload-section h4 {
+  margin-bottom: 10px;
+  color: #303133;
+}
+
+.image-uploader .upload-area {
+  border: 2px dashed #d9d9d9;
+  border-radius: 8px;
+  width: 200px;
+  height: 200px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  transition: border-color 0.3s;
+}
+
+.image-uploader .upload-area:hover {
+  border-color: #409EFF;
+}
+
+.upload-icon {
+  font-size: 28px;
+  color: #8c939d;
+  margin-bottom: 8px;
+}
+
+.upload-text {
+  color: #606266;
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+.upload-hint {
+  color: #909399;
+  font-size: 12px;
+}
+
+.image-preview-container {
+  text-align: center;
+}
+
+.preview-image {
+  max-width: 100%;
+  max-height: 500px;
+  object-fit: contain;
+  border-radius: 8px;
 }
 </style>

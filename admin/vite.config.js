@@ -11,6 +11,11 @@ export default defineConfig({
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,
         secure: false
+      },
+      '/static': {  // 添加这个静态文件代理
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+        secure: false
       }
     }
   }

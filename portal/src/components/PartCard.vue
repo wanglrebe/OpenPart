@@ -191,18 +191,21 @@ export default {
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  border-radius: 12px 12px 0 0; /* 只有顶部圆角 */
 }
 
 .part-img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain; /* 改为 contain，显示完整图片 */
+  background: white; /* 添加白色背景，避免透明图片问题 */
   transition: transform 0.3s ease;
 }
 
 .part-card:hover .part-img {
-  transform: scale(1.05);
+  transform: scale(1.02); /* 减小放大倍数，避免 contain 模式下的问题 */
 }
+
 
 .part-placeholder {
   display: flex;

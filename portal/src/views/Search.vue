@@ -1,24 +1,28 @@
 <template>
   <div class="search-page">
-    <!-- 头部搜索栏 -->
+    <!-- 头部搜索栏 - 完全自定义布局，不依赖container -->
     <header class="search-header">
-      <div class="container">
-        <div class="search-nav">
-          <router-link to="/" class="logo-link">
-            <h1 class="logo">OpenPart</h1>
+      <nav class="search-navigation">
+        <div class="logo">
+          <router-link to="/" style="text-decoration: none; color: inherit;">
+            <h1>OpenPart</h1>
           </router-link>
-          
-          <div class="search-box-container">
-            <SearchBox 
-              ref="searchBoxRef"
-              :placeholder="'搜索零件、型号、参数...'"
-              @search="onSearch"
-            />
-          </div>
-          
+          <span class="tagline">专门零件搜索</span>
+        </div>
+        
+        <!-- 搜索框区域 -->
+        <div class="search-box-container">
+          <SearchBox 
+            ref="searchBoxRef"
+            :placeholder="'搜索零件、型号、参数...'"
+            @search="onSearch"
+          />
+        </div>
+        
+        <div class="nav-actions">
           <ThemeToggle />
         </div>
-      </div>
+      </nav>
     </header>
     
     <!-- 搜索结果区域 -->
@@ -354,40 +358,57 @@ export default {
   display: none !important;
 }
 
-/* 搜索头部 */
+/* 头部导航 - 模拟主页的容器边距效果 */
 .search-header {
+  padding: 16px 0;
   background: var(--bg-card);
   border-bottom: 1px solid var(--border-color);
-  padding: 16px 0;
   position: sticky;
   top: 0;
   z-index: 100;
   backdrop-filter: blur(8px);
 }
 
-.search-nav {
+.search-navigation {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 16px;
-}
-
-.logo-link {
-  text-decoration: none;
-  flex-shrink: 0;
-  min-width: 100px;
+  width: 100%;
+  max-width: 1200px;  /* 与主页container相同的最大宽度 */
+  margin: 0 auto;     /* 居中对齐，与主页一致 */
+  padding: 0 20px;    /* 与main.css中container相同的内边距 */
 }
 
 .logo {
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--primary);
-  margin: 0;
+  flex-shrink: 0;
 }
 
+.logo h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.tagline {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-left: 8px;
+}
+
+.nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+/* 搜索框容器 */
 .search-box-container {
   flex: 1;
   min-width: 300px;
-  max-width: 500px;
+  max-width: 600px;
+  margin: 0 24px;
 }
 
 /* 主要内容 */
@@ -666,24 +687,37 @@ export default {
   }
 }
 
+/* 响应式设计 */
+@media (max-width: 1024px) {
+  .container {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+  
+  .filters-sidebar {
+    position: static;
+    order: 2;
+  }
+  
+  .results-content {
+    order: 1;
+  }
+}
+
 @media (max-width: 768px) {
-  .search-nav {
-    flex-wrap: nowrap;
+  .search-navigation {
+    padding: 0 16px; /* 移动端边距与main.css一致 */
     gap: 12px;
   }
   
-  .logo-link {
-    min-width: 80px;
+  .logo h1 {
+    font-size: 20px;
   }
   
   .search-box-container {
-    order: 3;
-    flex: 1 1 100%;
     min-width: 200px;
-  }
-  
-  .logo {
-    font-size: 18px;
+    max-width: none;
+    margin: 0 12px;
   }
   
   .results-header {

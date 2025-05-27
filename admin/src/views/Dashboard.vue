@@ -81,6 +81,14 @@
                 <el-icon><Search /></el-icon>
                 管理零件
               </el-button>
+              <el-button type="warning" @click="$router.push('/import-export')">
+                <el-icon><Download /></el-icon>
+                数据导出
+              </el-button>
+              <el-button type="info" @click="$router.push('/import-export')">
+                <el-icon><Upload /></el-icon>
+                数据导入
+              </el-button>
               <el-button type="info" @click="showUserManagement">
                 <el-icon><UserFilled /></el-icon>
                 用户管理

@@ -1,4 +1,4 @@
-// admin/src/router/index.js
+// admin/src/router/index.js (更新版本 - 添加导入导出路由)
 import { createRouter, createWebHistory } from 'vue-router'
 import { setupRouterGuards } from './guards'
 
@@ -6,6 +6,7 @@ import { setupRouterGuards } from './guards'
 import Login from '../views/Login.vue'
 import Dashboard from '../views/Dashboard.vue'
 import PartsAdmin from '../views/PartsAdmin.vue'
+import ImportExport from '../views/ImportExport.vue'  // 新增
 
 const routes = [
   {
@@ -25,9 +26,15 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
-    path: '/parts',  // 确保这个路径正确
+    path: '/parts',
     name: 'PartsAdmin',
     component: PartsAdmin,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/import-export',  // 新增路由
+    name: 'ImportExport',
+    component: ImportExport,
     meta: { requiresAuth: true }
   }
 ]

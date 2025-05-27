@@ -11,7 +11,8 @@
         router
       >
         <el-menu-item index="Dashboard">仪表板</el-menu-item>
-        <el-menu-item index="/parts">零件管理</el-menu-item>  <!-- 修改这里 -->
+        <el-menu-item index="/parts">零件管理</el-menu-item>
+        <el-menu-item index="/import-export">数据管理</el-menu-item>  <!-- 新增菜单项 -->
       </el-menu>
     </div>
     

@@ -1,4 +1,4 @@
-<!-- portal/src/views/Compare.vue (新文件) -->
+<!-- portal/src/views/Compare.vue (增强版 - 添加错误零件清理功能) -->
 <template>
   <div class="compare-page">
     <!-- 头部导航 -->
@@ -30,7 +30,7 @@
           <p>正在加载对比数据...</p>
         </div>
         
-        <!-- 错误状态 -->
+        <!-- 错误状态 - 增强版 -->
         <div v-else-if="error" class="error-container">
           <div class="error-icon">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -38,10 +38,59 @@
             </svg>
           </div>
           <h3>加载失败</h3>
-          <p>{{ error }}</p>
-          <button class="btn btn-primary" @click="loadComparison">
-            重试
-          </button>
+          <p class="error-message">{{ error }}</p>
+          
+          <!-- 检测到无效零件时的特殊处理 -->
+          <div v-if="isInvalidPartsError" class="invalid-parts-notice">
+            <div class="notice-content">
+              <svg class="notice-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div class="notice-text">
+                <h4>检测到无效零件</h4>
+                <p>对比列表中可能包含已被删除的零件，导致无法正常加载。</p>
+                <div v-if="invalidPartIds.length > 0" class="invalid-parts-list">
+                  <span>无效零件ID：{{ invalidPartIds.join(', ') }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 操作按钮组 -->
+          <div class="error-actions">
+            <button class="btn btn-outline" @click="loadComparison">
+              <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              重试
+            </button>
+            
+            <button 
+              v-if="isInvalidPartsError" 
+              class="btn btn-warning" 
+              @click="cleanInvalidParts"
+              :disabled="cleaningParts"
+            >
+              <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+              {{ cleaningParts ? '清理中...' : '清理无效零件' }}
+            </button>
+            
+            <button class="btn btn-primary" @click="goToSearch">
+              <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              重新搜索零件
+            </button>
+            
+            <button class="btn btn-secondary" @click="clearAllComparison">
+              <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              清空对比列表
+            </button>
+          </div>
         </div>
         
         <!-- 对比结果 -->
@@ -263,6 +312,8 @@ export default {
     const error = ref('')
     const showIdentical = ref(false)
     const showMissing = ref(true)
+    const cleaningParts = ref(false)
+    const invalidPartIds = ref([])
     
     // 消息提示状态
     const toast = ref({
@@ -281,6 +332,16 @@ export default {
         return ids.map(id => parseInt(id)).filter(id => !isNaN(id))
       }
       return []
+    })
+    
+    // 检测是否是无效零件错误
+    const isInvalidPartsError = computed(() => {
+      return error.value && (
+        error.value.includes('未找到零件') || 
+        error.value.includes('not found') ||
+        error.value.includes('404') ||
+        invalidPartIds.value.length > 0
+      )
     })
     
     // 过滤后的基本对比数据
@@ -344,16 +405,150 @@ export default {
       
       loading.value = true
       error.value = ''
+      invalidPartIds.value = []
       
       try {
+        console.log('尝试加载对比数据，零件ID:', partIds.value)
         const response = await partsAPI.compare(partIds.value)
         comparisonData.value = response.data
+        console.log('对比数据加载成功')
       } catch (err) {
         console.error('加载对比数据失败:', err)
-        error.value = err.response?.data?.detail || '加载对比数据失败'
+        
+        // 分析错误类型并提取无效的零件ID
+        const errorMessage = err.response?.data?.detail || err.message || '加载对比数据失败'
+        error.value = errorMessage
+        
+        // 尝试从错误信息中提取无效的零件ID
+        if (errorMessage.includes('未找到零件')) {
+          try {
+            // 提取错误信息中的ID列表，例如: "未找到零件: [1, 2, 3]"
+            const match = errorMessage.match(/\[([^\]]+)\]/)
+            if (match) {
+              const extractedIds = match[1].split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
+              invalidPartIds.value = extractedIds
+              console.log('提取到无效零件ID:', extractedIds)
+            }
+          } catch (e) {
+            console.warn('无法解析错误信息中的零件ID:', e)
+            // 如果无法解析，假设所有ID都可能有问题
+            invalidPartIds.value = [...partIds.value]
+          }
+        }
+        
+        // 如果是404错误或零件不存在，尝试检测哪些零件无效
+        if (err.response?.status === 404 || errorMessage.includes('not found')) {
+          invalidPartIds.value = [...partIds.value]
+        }
       }
       
       loading.value = false
+    }
+    
+    // 清理无效零件
+    const cleanInvalidParts = async () => {
+      if (cleaningParts.value) return
+      
+      cleaningParts.value = true
+      
+      try {
+        console.log('开始清理无效零件...')
+        
+        // 方案1: 如果我们知道具体哪些零件无效，直接移除它们
+        if (invalidPartIds.value.length > 0) {
+          console.log('移除已知的无效零件ID:', invalidPartIds.value)
+          invalidPartIds.value.forEach(invalidId => {
+            comparisonManager.removeFromComparison(invalidId)
+          })
+        } else {
+          // 方案2: 逐个验证零件是否存在
+          console.log('逐个验证零件有效性...')
+          const validIds = []
+          const invalidIds = []
+          
+          for (const partId of partIds.value) {
+            try {
+              await partsAPI.getPart(partId)
+              validIds.push(partId)
+              console.log(`零件 ${partId} 有效`)
+            } catch (err) {
+              invalidIds.push(partId)
+              console.log(`零件 ${partId} 无效:`, err.response?.status)
+              comparisonManager.removeFromComparison(partId)
+            }
+          }
+          
+          invalidPartIds.value = invalidIds
+          console.log('验证完成，有效:', validIds, '无效:', invalidIds)
+        }
+        
+        // 获取清理后的零件列表
+        const remainingParts = comparisonManager.getComparisonList()
+        console.log('清理后剩余零件:', remainingParts)
+        
+        if (remainingParts.length === 0) {
+          // 如果没有有效零件了，显示提示并跳转到搜索页面
+          showToast({
+            type: 'info',
+            message: '已清理所有无效零件，对比列表为空',
+            action: {
+              text: '去搜索零件',
+              callback: () => {
+                router.push('/search')
+              }
+            }
+          })
+        } else {
+          // 如果还有有效零件，重新加载对比页面
+          const validIds = remainingParts.map(part => part.id)
+          await router.replace({
+            name: 'Compare',
+            query: { ids: validIds.join(',') }
+          })
+          
+          showToast({
+            type: 'success',
+            message: `已清理 ${invalidPartIds.value.length} 个无效零件，剩余 ${validIds.length} 个零件`
+          })
+        }
+        
+      } catch (err) {
+        console.error('清理无效零件时出错:', err)
+        showToast({
+          type: 'error',
+          message: '清理过程中出现错误，请尝试手动清空对比列表'
+        })
+      }
+      
+      cleaningParts.value = false
+    }
+    
+    // 清空所有对比零件
+    const clearAllComparison = async () => {
+      try {
+        // 确认操作
+        if (!confirm('确定要清空整个对比列表吗？此操作不可撤销。')) {
+          return
+        }
+        
+        console.log('清空所有对比零件')
+        comparisonManager.clearComparison()
+        
+        showToast({
+          type: 'success',
+          message: '已清空对比列表'
+        })
+        
+        // 跳转到首页或搜索页面
+        router.push('/search')
+        
+      } catch (err) {
+        console.error('清空对比列表失败:', err)
+        showToast({
+          type: 'error',
+          message: '清空失败，请刷新页面重试'
+        })
+      }
     }
     
     const isIdentical = (values) => {
@@ -474,6 +669,7 @@ export default {
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
+      URL.revokeObjectURL(url)
     }
     
     const addToFavorites = () => {
@@ -588,9 +784,14 @@ export default {
       showIdentical,
       showMissing,
       toast,
+      cleaningParts,
+      invalidPartIds,
+      isInvalidPartsError,
       filteredBasicComparison,
       filteredPropertiesComparison,
       loadComparison,
+      cleanInvalidParts,
+      clearAllComparison,
       getRowClass,
       getCellClass,
       removePart,
@@ -606,7 +807,306 @@ export default {
 </script>
 
 <style scoped>
-/* 现有样式保持不变，添加新的单零件样式 */
+/* 现有样式保持不变，添加新的错误处理样式 */
+
+/* 无效零件提示样式 */
+.invalid-parts-notice {
+  background: color-mix(in srgb, #f59e0b 8%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, #f59e0b 30%, var(--border-color));
+  border-radius: 12px;
+  padding: 20px;
+  margin: 20px 0;
+}
+
+.notice-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.notice-icon {
+  width: 24px;
+  height: 24px;
+  color: #f59e0b;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.notice-text h4 {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.notice-text p {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.invalid-parts-list {
+  font-size: 13px;
+  color: var(--text-muted);
+  background: color-mix(in srgb, #f59e0b 10%, transparent);
+  padding: 8px 12px;
+  border-radius: 6px;
+  border-left: 3px solid #f59e0b;
+}
+
+/* 错误操作按钮组 */
+.error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 24px;
+}
+
+.error-actions .btn {
+  min-width: 140px;
+}
+
+/* 按钮样式增强 */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: none;
+  border: 1px solid;
+  background: none;
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--secondary);
+  border-color: var(--secondary);
+}
+
+.btn-outline {
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+.btn-outline:hover:not(:disabled) {
+  background: var(--bg-secondary);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.btn-warning {
+  background: #f59e0b;
+  color: white;
+  border-color: #f59e0b;
+}
+
+.btn-warning:hover:not(:disabled) {
+  background: #d97706;
+  border-color: #d97706;
+}
+
+.btn-secondary {
+  background: var(--text-muted);
+  color: white;
+  border-color: var(--text-muted);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--text-secondary);
+  border-color: var(--text-secondary);
+}
+
+.btn-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+/* 错误消息样式 */
+.error-message {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 8px 0 16px 0;
+  text-align: center;
+  max-width: 500px;
+  line-height: 1.5;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .error-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .error-actions .btn {
+    min-width: auto;
+    justify-content: center;
+  }
+  
+  .invalid-parts-notice {
+    padding: 16px;
+    margin: 16px 0;
+  }
+  
+  .notice-content {
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .notice-icon {
+    align-self: flex-start;
+  }
+}
+
+@media (max-width: 480px) {
+  .invalid-parts-list {
+    font-size: 12px;
+    word-break: break-all;
+  }
+  
+  .error-message {
+    font-size: 13px;
+  }
+}
+
+/* 保持所有原有样式... */
+.compare-page {
+  min-height: 100vh;
+  background: var(--bg-primary);
+}
+
+/* 头部导航 */
+.compare-header {
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border-color);
+  padding: 16px 0;
+}
+
+.compare-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.back-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.back-btn:hover {
+  background: var(--bg-secondary);
+  border-color: var(--primary);
+}
+
+.back-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.page-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+/* 主要内容 */
+.compare-main {
+  padding: 24px 0;
+}
+
+/* 加载和错误状态 */
+.loading-container,
+.error-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px;
+  text-align: center;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border-color);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 16px;
+}
+
+.error-icon {
+  width: 64px;
+  height: 64px;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+}
+
+/* 对比概览 */
+.comparison-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+.summary-stats {
+  display: flex;
+  gap: 32px;
+}
+
+.stat-item {
+  text-align: center;
+}
+
+.stat-number {
+  display: block;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--primary);
+  margin-bottom: 4px;
+}
+
+.stat-label {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.summary-actions {
+  display: flex;
+  gap: 12px;
+}
 
 /* 单零件提示样式 */
 .single-part-notice {

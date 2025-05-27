@@ -1,22 +1,15 @@
-<!-- portal/src/views/Projects.vue 完整版 -->
+<!-- portal/src/views/Projects.vue 完整版 - 使用全局导航 -->
 <template>
   <div class="projects-page">
-    <!-- 头部导航 -->
-    <header class="projects-header">
+    <!-- 全局导航 -->
+    <GlobalNavigation />
+    
+    <!-- 页面标题区域 -->
+    <div class="page-header">
       <div class="container">
-        <div class="projects-nav">
-          <router-link to="/" class="logo-link">
-            <h1 class="logo">OpenPart</h1>
-          </router-link>
-          
-          <h2 class="page-title">项目清单</h2>
-          
-          <div class="nav-actions">
-            <ThemeToggle />
-          </div>
-        </div>
+        <h1 class="page-title">项目清单</h1>
       </div>
-    </header>
+    </div>
     
     <!-- 主要内容 -->
     <main class="projects-main">
@@ -293,13 +286,13 @@
 <script>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import ThemeToggle from '../components/ThemeToggle.vue'
+import GlobalNavigation from '../components/GlobalNavigation.vue'
 import { projectTemplates, getTemplateById } from '../data/projectTemplates'
 
 export default {
   name: 'Projects',
   components: {
-    ThemeToggle
+    GlobalNavigation
   },
   setup() {
     const router = useRouter()
@@ -618,44 +611,22 @@ export default {
 }
 </script>
 
-/* Projects.vue 样式完整版 */
+/* Projects.vue 样式完整版 - 使用全局导航 */
 <style scoped>
 .projects-page {
   min-height: 100vh;
   background: var(--bg-primary);
 }
 
-/* 头部导航 */
-.projects-header {
+/* 页面标题区域 */
+.page-header {
   background: var(--bg-card);
   border-bottom: 1px solid var(--border-color);
-  padding: 16px 0;
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  backdrop-filter: blur(8px);
-}
-
-.projects-nav {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.logo-link {
-  text-decoration: none;
-  flex-shrink: 0;
-}
-
-.logo {
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--primary);
-  margin: 0;
+  padding: 20px 0;
 }
 
 .page-title {
-  font-size: 24px;
+  font-size: 28px;
   font-weight: 600;
   color: var(--text-primary);
   margin: 0;
@@ -909,6 +880,8 @@ export default {
   border-radius: 4px;
   font-weight: 500;
 }
+
+/* Projects.vue 样式完整版 - 续 */
 
 .project-status.active {
   background: color-mix(in srgb, #f59e0b 10%, transparent);
@@ -1299,13 +1272,12 @@ export default {
 }
 
 @media (max-width: 768px) {
-  .projects-nav {
-    flex-wrap: wrap;
-    gap: 12px;
+  .page-header {
+    padding: 16px 0;
   }
   
   .page-title {
-    font-size: 20px;
+    font-size: 24px;
   }
   
   .projects-main {

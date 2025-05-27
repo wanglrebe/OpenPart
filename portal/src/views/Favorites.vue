@@ -1,22 +1,15 @@
-<!-- portal/src/views/Favorites.vue (新页面) -->
+<!-- portal/src/views/Favorites.vue (更新版本 - 使用全局导航完整版) -->
 <template>
   <div class="favorites-page">
-    <!-- 头部导航 -->
-    <header class="favorites-header">
+    <!-- 全局导航 -->
+    <GlobalNavigation />
+    
+    <!-- 页面标题区域 -->
+    <div class="page-header">
       <div class="container">
-        <div class="favorites-nav">
-          <router-link to="/" class="logo-link">
-            <h1 class="logo">OpenPart</h1>
-          </router-link>
-          
-          <h2 class="page-title">我的收藏</h2>
-          
-          <div class="nav-actions">
-            <ThemeToggle />
-          </div>
-        </div>
+        <h1 class="page-title">我的收藏</h1>
       </div>
-    </header>
+    </div>
     
     <!-- 主要内容 -->
     <main class="favorites-main">
@@ -288,13 +281,13 @@
 <script>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import ThemeToggle from '../components/ThemeToggle.vue'
+import GlobalNavigation from '../components/GlobalNavigation.vue'
 import { favoritesManager, comparisonManager } from '../utils/api'
 
 export default {
   name: 'Favorites',
   components: {
-    ThemeToggle
+    GlobalNavigation
   },
   setup() {
     const router = useRouter()
@@ -341,7 +334,7 @@ export default {
     const filterFavorites = () => {
       let filtered = [...favorites.value]
       
-      // 按关键词筛选
+      // 按关键词搜索
       if (searchQuery.value.trim()) {
         const query = searchQuery.value.toLowerCase()
         filtered = filtered.filter(f => 
@@ -631,44 +624,21 @@ export default {
 }
 </script>
 
-/* Favorites.vue 样式完整版 */
 <style scoped>
 .favorites-page {
   min-height: 100vh;
   background: var(--bg-primary);
 }
 
-/* 头部导航 */
-.favorites-header {
+/* 页面标题区域 */
+.page-header {
   background: var(--bg-card);
   border-bottom: 1px solid var(--border-color);
-  padding: 16px 0;
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  backdrop-filter: blur(8px);
-}
-
-.favorites-nav {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.logo-link {
-  text-decoration: none;
-  flex-shrink: 0;
-}
-
-.logo {
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--primary);
-  margin: 0;
+  padding: 20px 0;
 }
 
 .page-title {
-  font-size: 24px;
+  font-size: 28px;
   font-weight: 600;
   color: var(--text-primary);
   margin: 0;
@@ -870,6 +840,8 @@ export default {
   background: #e11d48;
   border-color: #e11d48;
 }
+
+/* Favorites.vue 样式完整版 - 接续部分 */
 
 .btn-danger:disabled {
   opacity: 0.5;
@@ -1287,13 +1259,12 @@ export default {
 }
 
 @media (max-width: 768px) {
-  .favorites-nav {
-    flex-wrap: wrap;
-    gap: 12px;
+  .page-header {
+    padding: 16px 0;
   }
   
   .page-title {
-    font-size: 20px;
+    font-size: 24px;
   }
   
   .favorites-main {

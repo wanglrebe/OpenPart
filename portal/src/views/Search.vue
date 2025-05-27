@@ -1,29 +1,18 @@
+<!-- portal/src/views/Search.vue (更新版本 - 完整版) -->
 <template>
   <div class="search-page">
-    <!-- 头部搜索栏 - 完全自定义布局，不依赖container -->
-    <header class="search-header">
-      <nav class="search-navigation">
-        <div class="logo">
-          <router-link to="/" style="text-decoration: none; color: inherit;">
-            <h1>OpenPart</h1>
-          </router-link>
-          <span class="tagline">专门零件搜索</span>
-        </div>
-        
-        <!-- 搜索框区域 -->
-        <div class="search-box-container">
+    <!-- 全局导航（带搜索框） -->
+    <GlobalNavigation>
+      <template #search>
+        <div class="nav-search-wrapper">
           <SearchBox 
             ref="searchBoxRef"
             :placeholder="'搜索零件、型号、参数...'"
             @search="onSearch"
           />
         </div>
-        
-        <div class="nav-actions">
-          <ThemeToggle />
-        </div>
-      </nav>
-    </header>
+      </template>
+    </GlobalNavigation>
     
     <!-- 搜索结果区域 -->
     <main class="search-main">
@@ -153,16 +142,16 @@
 <script>
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import GlobalNavigation from '../components/GlobalNavigation.vue'
 import SearchBox from '../components/SearchBox.vue'
-import ThemeToggle from '../components/ThemeToggle.vue'
 import PartCard from '../components/PartCard.vue'
 import { partsAPI, favoritesManager, comparisonManager } from '../utils/api'
 
 export default {
   name: 'Search',
   components: {
+    GlobalNavigation,
     SearchBox,
-    ThemeToggle,
     PartCard
   },
   setup() {
@@ -239,6 +228,13 @@ export default {
       parts.value = sortedParts
     }
     
+    // 处理搜索
+    const onSearch = (query) => {
+      searchQuery.value = query
+      router.replace({ query: { q: query } })
+      searchParts()
+    }
+    
     // 应用筛选
     const applyFilters = () => {
       // 更新URL查询参数
@@ -251,13 +247,6 @@ export default {
       }
       
       router.replace({ query })
-      searchParts()
-    }
-    
-    // 处理搜索
-    const onSearch = (query) => {
-      searchQuery.value = query
-      router.replace({ query: { q: query } })
       searchParts()
     }
     
@@ -353,62 +342,36 @@ export default {
   background: var(--bg-primary);
 }
 
-/* 隐藏搜索提示 */
-.search-box-container :deep(.search-tips) {
-  display: none !important;
+.search-page {
+  min-height: 100vh;
+  background: var(--bg-primary);
 }
 
-/* 头部导航 - 模拟主页的容器边距效果 */
-.search-header {
-  padding: 16px 0;
-  background: var(--bg-card);
-  border-bottom: 1px solid var(--border-color);
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  backdrop-filter: blur(8px);
-}
-
-.search-navigation {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+/* 导航栏搜索框样式 */
+.nav-search-wrapper {
   width: 100%;
-  max-width: 1200px;  /* 与主页container相同的最大宽度 */
-  margin: 0 auto;     /* 居中对齐，与主页一致 */
-  padding: 0 20px;    /* 与main.css中container相同的内边距 */
 }
 
-.logo {
-  flex-shrink: 0;
+.nav-search-wrapper :deep(.search-input) {
+  height: 36px;
+  padding: 8px 40px 8px 40px;
+  font-size: 14px;
+  border-radius: 8px;
 }
 
-.logo h1 {
-  margin: 0;
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--primary);
+.nav-search-wrapper :deep(.search-icon) {
+  width: 16px;
+  height: 16px;
 }
 
-.tagline {
-  font-size: 12px;
-  color: var(--text-muted);
-  margin-left: 8px;
+.nav-search-wrapper :deep(.clear-icon) {
+  width: 14px;
+  height: 14px;
 }
 
-.nav-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-shrink: 0;
-}
-
-/* 搜索框容器 */
-.search-box-container {
-  flex: 1;
-  min-width: 300px;
-  max-width: 600px;
-  margin: 0 24px;
+/* 隐藏搜索提示（导航栏不需要） */
+.nav-search-wrapper :deep(.search-tips) {
+  display: none !important;
 }
 
 /* 主要内容 */
@@ -687,39 +650,7 @@ export default {
   }
 }
 
-/* 响应式设计 */
-@media (max-width: 1024px) {
-  .container {
-    grid-template-columns: 1fr;
-    gap: 24px;
-  }
-  
-  .filters-sidebar {
-    position: static;
-    order: 2;
-  }
-  
-  .results-content {
-    order: 1;
-  }
-}
-
 @media (max-width: 768px) {
-  .search-navigation {
-    padding: 0 16px; /* 移动端边距与main.css一致 */
-    gap: 12px;
-  }
-  
-  .logo h1 {
-    font-size: 20px;
-  }
-  
-  .search-box-container {
-    min-width: 200px;
-    max-width: none;
-    margin: 0 12px;
-  }
-  
   .results-header {
     flex-direction: column;
     align-items: flex-start;
@@ -745,19 +676,27 @@ export default {
     min-width: auto;
     max-width: none;
   }
-}
-
-@media (max-width: 480px) {
-  .search-nav {
-    gap: 8px;
+  
+  /* 移动端搜索框在顶栏时的样式优化 */
+  .nav-search-wrapper :deep(.search-input) {
+    height: 34px;
+    font-size: 13px;
+    padding: 6px 35px 6px 35px;
   }
   
-  .search-box-container {
-    min-width: 150px;
+  .nav-search-wrapper :deep(.search-icon) {
+    left: 10px;
+    width: 14px;
+    height: 14px;
   }
   
-  .logo {
-    font-size: 16px;
+  .nav-search-wrapper :deep(.clear-button) {
+    right: 10px;
+  }
+  
+  .nav-search-wrapper :deep(.clear-icon) {
+    width: 12px;
+    height: 12px;
   }
 }
 </style>

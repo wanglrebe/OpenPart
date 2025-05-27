@@ -1,20 +1,8 @@
+<!-- portal/src/views/Home.vue (优化版本 - 重新设计页脚) -->
 <template>
   <div class="home">
-    <!-- 头部导航 -->
-    <header class="header">
-      <div class="container">
-        <div class="nav">
-          <div class="logo">
-            <h1>{{ config.title }}</h1>
-            <span class="tagline">{{ config.subtitle }}</span>
-          </div>
-          
-          <div class="nav-actions">
-            <ThemeToggle />
-          </div>
-        </div>
-      </div>
-    </header>
+    <!-- 全局导航 -->
+    <GlobalNavigation />
     
     <!-- 主要内容区 -->
     <main class="main">
@@ -54,6 +42,60 @@
           </div>
         </div>
       </div>
+      
+      <!-- 功能快捷入口 -->
+      <section class="features-section">
+        <div class="container">
+          <div class="features-grid">
+            <router-link to="/search" class="feature-card">
+              <div class="feature-icon search">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m21 21-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+              <h3>搜索零件</h3>
+              <p>浏览数千个电子零件</p>
+            </router-link>
+            
+            <router-link to="/favorites" class="feature-card favorites">
+              <div class="feature-icon">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                </svg>
+              </div>
+              <h3>我的收藏</h3>
+              <p>{{ favoritesCount }} 个收藏零件</p>
+              <div v-if="favoritesCount > 0" class="feature-badge">{{ favoritesCount }}</div>
+            </router-link>
+            
+            <router-link to="/projects" class="feature-card projects">
+              <div class="feature-icon">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg>
+              </div>
+              <h3>项目清单</h3>
+              <p>{{ projectsCount }} 个进行中项目</p>
+              <div v-if="projectsCount > 0" class="feature-badge">{{ projectsCount }}</div>
+            </router-link>
+            
+            <div 
+              v-if="comparisonCount > 0"
+              @click="goToComparison"
+              class="feature-card comparison active"
+            >
+              <div class="feature-icon">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+              </div>
+              <h3>零件对比</h3>
+              <p>{{ comparisonCount }} 个零件待对比</p>
+              <div class="feature-badge comparison">{{ comparisonCount }}</div>
+            </div>
+          </div>
+        </div>
+      </section>
       
       <!-- 统计信息 -->
       <section class="stats-section">
@@ -102,22 +144,33 @@
     <footer class="footer">
       <div class="container">
         <div class="footer-content">
-          <div 
-            v-for="section in config.footer.sections" 
-            :key="section.title"
-            class="footer-section"
-          >
-            <h5>{{ section.title }}</h5>
-            <p v-if="section.content">{{ section.content }}</p>
-            <ul v-if="section.links">
-              <li v-for="link in section.links" :key="link.text">
-                <a :href="link.url">{{ link.text }}</a>
-              </li>
+          <!-- 项目介绍 -->
+          <div class="footer-section">
+            <h5>OpenPart</h5>
+            <p>专业的电子零件搜索门户，提供全面的零件信息和项目管理功能，助力您的电子项目开发。</p>
+          </div>
+          
+          <!-- 快速链接 -->
+          <div class="footer-section">
+            <h5>快速链接</h5>
+            <ul>
+              <li><a href="#" @click.prevent>关于项目</a></li>
+              <li><a href="#" @click.prevent>帮助反馈</a></li>
+            </ul>
+          </div>
+          
+          <!-- 项目信息 -->
+          <div class="footer-section">
+            <h5>项目信息</h5>
+            <ul>
+              <li><a href="https://github.com/wanglrebe/OpenPart/" target="_blank" rel="noopener noreferrer">GitHub 仓库</a></li>
+              <li><span class="footer-text">开源协议: MIT</span></li>
             </ul>
           </div>
         </div>
+        
         <div class="footer-bottom">
-          <p>{{ config.footer.copyright }}</p>
+          <p>&copy; 2024 OpenPart. 开源零件搜索平台</p>
         </div>
       </div>
     </footer>
@@ -125,17 +178,17 @@
 </template>
 
 <script>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import ThemeToggle from '../components/ThemeToggle.vue'
+import GlobalNavigation from '../components/GlobalNavigation.vue'
 import SearchBox from '../components/SearchBox.vue'
-import { partsAPI, statsAPI } from '../utils/api'
+import { partsAPI, statsAPI, favoritesManager, comparisonManager } from '../utils/api'
 import { siteConfig } from '../config/site'
 
 export default {
   name: 'Home',
   components: {
-    ThemeToggle,
+    GlobalNavigation,
     SearchBox
   },
   setup() {
@@ -147,6 +200,11 @@ export default {
       totalCategories: 0,
       searchCount: '0'
     })
+    
+    // 功能卡片状态
+    const favoritesCount = ref(0)
+    const projectsCount = ref(0)
+    const comparisonCount = ref(0)
     
     // 显示的统计数据
     const displayStats = computed(() => {
@@ -160,6 +218,16 @@ export default {
         }
       }
     })
+    
+    // 更新功能卡片计数
+    const updateFeatureCounts = () => {
+      favoritesCount.value = favoritesManager.getFavoritesCount()
+      comparisonCount.value = comparisonManager.getComparisonCount()
+      
+      // 获取项目数量
+      const projects = JSON.parse(localStorage.getItem('openpart_projects') || '[]')
+      projectsCount.value = projects.length
+    }
     
     const loadData = async () => {
       try {
@@ -209,17 +277,41 @@ export default {
       })
     }
     
+    const goToComparison = () => {
+      const compareUrl = comparisonManager.getComparisonUrl()
+      if (compareUrl) {
+        router.push(compareUrl)
+      }
+    }
+    
+    // 监听存储变化
+    const handleStorageChange = (e) => {
+      if (['openpart_favorites', 'openpart_comparison', 'openpart_projects'].includes(e.key)) {
+        updateFeatureCounts()
+      }
+    }
+    
     onMounted(() => {
       loadData()
+      updateFeatureCounts()
+      window.addEventListener('storage', handleStorageChange)
+    })
+    
+    onUnmounted(() => {
+      window.removeEventListener('storage', handleStorageChange)
     })
     
     return {
       config,
       categories,
       displayStats,
+      favoritesCount,
+      projectsCount,
+      comparisonCount,
       onSearch,
       searchTag,
-      searchCategory
+      searchCategory,
+      goToComparison
     }
   }
 }
@@ -230,42 +322,6 @@ export default {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-}
-
-/* 头部导航 */
-.header {
-  padding: 16px 0;
-  background: var(--bg-card);
-  border-bottom: 1px solid var(--border-color);
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  backdrop-filter: blur(8px);
-}
-
-.nav {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.logo h1 {
-  margin: 0;
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--primary);
-}
-
-.tagline {
-  font-size: 12px;
-  color: var(--text-muted);
-  margin-left: 8px;
-}
-
-.nav-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
 }
 
 /* 主要内容 */
@@ -280,8 +336,8 @@ export default {
     color-mix(in srgb, var(--secondary) 3%, var(--bg-primary))
   );
   position: relative;
-  overflow: visible; /* 改为visible，允许内容溢出 */
-  z-index: 10; /* 设置较高的z-index */
+  overflow: visible;
+  z-index: 10;
 }
 
 .hero-section::before {
@@ -374,12 +430,125 @@ export default {
   transform: translateY(-1px);
 }
 
-/* 统计信息 */
-.stats-section {
+/* 功能快捷入口 */
+.features-section {
   padding: 60px 0;
   background: var(--bg-card);
   position: relative;
-  z-index: 1; /* 确保统计区域的z-index较低 */
+  z-index: 1;
+}
+
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 24px;
+}
+
+.feature-card {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 24px;
+  text-align: center;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+  display: block;
+}
+
+.feature-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+  border-color: var(--primary);
+}
+
+.feature-card.favorites:hover {
+  border-color: #e11d48;
+}
+
+.feature-card.projects:hover {
+  border-color: #0ea5e9;
+}
+
+.feature-card.comparison {
+  background: color-mix(in srgb, #f59e0b 5%, var(--bg-primary));
+  border-color: color-mix(in srgb, #f59e0b 20%, var(--border-color));
+}
+
+.feature-card.comparison:hover {
+  border-color: #f59e0b;
+  background: color-mix(in srgb, #f59e0b 10%, var(--bg-primary));
+}
+
+.feature-icon {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 16px;
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  border-radius: 12px;
+}
+
+.feature-card.favorites .feature-icon {
+  color: #e11d48;
+  background: color-mix(in srgb, #e11d48 10%, transparent);
+}
+
+.feature-card.projects .feature-icon {
+  color: #0ea5e9;
+  background: color-mix(in srgb, #0ea5e9 10%, transparent);
+}
+
+.feature-card.comparison .feature-icon {
+  color: #f59e0b;
+  background: color-mix(in srgb, #f59e0b 15%, transparent);
+}
+
+.feature-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.feature-card h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 8px 0;
+}
+
+.feature-card p {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.feature-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: var(--primary);
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 12px;
+  min-width: 24px;
+  text-align: center;
+}
+
+.feature-badge.comparison {
+  background: #f59e0b;
+}
+
+/* 统计信息 */
+.stats-section {
+  padding: 60px 0;
+  background: var(--bg-secondary);
 }
 
 .stats-grid {
@@ -469,8 +638,8 @@ export default {
 
 .footer-content {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 32px;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 48px;
   margin-bottom: 32px;
 }
 
@@ -485,6 +654,7 @@ export default {
   color: var(--text-secondary);
   margin: 0;
   line-height: 1.6;
+  font-size: 14px;
 }
 
 .footer-section ul {
@@ -501,10 +671,16 @@ export default {
   color: var(--text-secondary);
   text-decoration: none;
   transition: color 0.2s ease;
+  font-size: 14px;
 }
 
 .footer-section a:hover {
   color: var(--primary);
+}
+
+.footer-text {
+  color: var(--text-secondary);
+  font-size: 14px;
 }
 
 .footer-bottom {
@@ -537,6 +713,15 @@ export default {
     justify-content: flex-start;
   }
   
+  .features-grid {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+  }
+  
+  .feature-card {
+    padding: 20px;
+  }
+  
   .stats-grid {
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     gap: 24px;
@@ -561,7 +746,7 @@ export default {
   
   .footer-content {
     grid-template-columns: 1fr;
-    gap: 24px;
+    gap: 32px;
   }
 }
 </style>

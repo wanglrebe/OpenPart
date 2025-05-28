@@ -1,4 +1,4 @@
-// admin/src/router/index.js (更新版本 - 添加导入导出路由)
+// admin/src/router/index.js (更新版本 - 添加插件管理路由)
 import { createRouter, createWebHistory } from 'vue-router'
 import { setupRouterGuards } from './guards'
 
@@ -6,7 +6,8 @@ import { setupRouterGuards } from './guards'
 import Login from '../views/Login.vue'
 import Dashboard from '../views/Dashboard.vue'
 import PartsAdmin from '../views/PartsAdmin.vue'
-import ImportExport from '../views/ImportExport.vue'  // 新增
+import ImportExport from '../views/ImportExport.vue'
+import CrawlerPlugins from '../views/CrawlerPlugins.vue'  // 新增
 
 const routes = [
   {
@@ -32,9 +33,15 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
-    path: '/import-export',  // 新增路由
+    path: '/import-export',
     name: 'ImportExport',
     component: ImportExport,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/crawler-plugins',  // 新增爬虫插件管理路由
+    name: 'CrawlerPlugins',
+    component: CrawlerPlugins,
     meta: { requiresAuth: true }
   }
 ]

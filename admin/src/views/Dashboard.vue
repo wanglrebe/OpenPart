@@ -89,6 +89,10 @@
                 <el-icon><Upload /></el-icon>
                 数据导入
               </el-button>
+              <el-button type="primary" @click="$router.push('/crawler-plugins')">
+                <el-icon><Tools /></el-icon>
+                插件管理
+              </el-button>
               <el-button type="info" @click="showUserManagement">
                 <el-icon><UserFilled /></el-icon>
                 用户管理

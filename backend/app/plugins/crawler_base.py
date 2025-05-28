@@ -25,6 +25,7 @@ class DataSourceType(Enum):
     DATABASE = "database"       # 数据库
     API = "api"                # API接口
     CATALOG = "catalog"        # 产品目录
+    DOCUMENT = "document"      # 文档文件（新增）
     OTHER = "other"            # 其他
 
 class PartData(BaseModel):

@@ -7,8 +7,8 @@
       <!-- 页面头部 -->
       <div class="page-header">
         <div class="header-left">
-          <h1>爬虫插件管理</h1>
-          <p>管理和配置数据源爬虫插件</p>
+          <h1>插件管理</h1>
+          <p>管理和配置数据源插件</p>
         </div>
         <div class="header-right">
           <el-button type="primary" @click="showUploadDialog = true">
@@ -211,7 +211,7 @@
 
     <!-- 上传插件对话框 -->
     <el-dialog
-      title="上传爬虫插件"
+      title="上传插件"
       v-model="showUploadDialog"
       width="600px"
       :close-on-click-modal="false"

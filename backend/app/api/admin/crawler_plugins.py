@@ -86,13 +86,32 @@ async def get_plugins(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin)
 ):
-    """获取所有插件列表"""
+    """获取所有插件列表 - 修复版本（使用真实信息）"""
     
     try:
         plugins = db.query(CrawlerPlugin).all()
         result = []
         
+        from app.plugins.plugin_manager import plugin_manager
+        
         for plugin in plugins:
+            # 尝试获取真实的配置schema
+            config_schema = []
+            allowed_domains = []
+            required_permissions = ["network"]
+            
+            try:
+                plugin_instance = plugin_manager.get_plugin(plugin.name)
+                if not plugin_instance:
+                    plugin_instance = plugin_manager.load_plugin(plugin.name, plugin.file_path)
+                
+                if plugin_instance:
+                    config_schema = [field.dict() for field in plugin_instance.config_schema]
+                    allowed_domains = plugin_instance.get_allowed_domains()
+                    required_permissions = plugin_instance.get_required_permissions()
+            except Exception as e:
+                print(f"无法加载插件 {plugin.name}: {e}")
+            
             plugin_data = {
                 "id": plugin.id,
                 "name": plugin.name,
@@ -110,39 +129,9 @@ async def get_plugins(
                 "success_count": plugin.success_count or 0,
                 "error_count": plugin.error_count or 0,
                 "config": plugin.config or {},
-                "config_schema": [
-                    {
-                        "name": "api_base_url",
-                        "label": "API基础地址",
-                        "type": "url",
-                        "required": True,
-                        "default": "https://api.test-electronics.com",
-                        "help_text": "测试电商API的基础地址"
-                    },
-                    {
-                        "name": "category_filter",
-                        "label": "零件类别",
-                        "type": "select",
-                        "required": False,
-                        "default": "all",
-                        "options": [
-                            {"value": "all", "label": "所有类别"},
-                            {"value": "resistor", "label": "电阻器"},
-                            {"value": "capacitor", "label": "电容器"}
-                        ],
-                        "help_text": "选择要爬取的零件类别"
-                    },
-                    {
-                        "name": "request_delay",
-                        "label": "请求延迟(秒)",  
-                        "type": "number",
-                        "default": 2,
-                        "validation": {"min": 1, "max": 10},
-                        "help_text": "两次请求之间的延迟时间"
-                    }
-                ],
-                "allowed_domains": ["test-electronics.com"],
-                "required_permissions": ["network"]
+                "config_schema": config_schema,
+                "allowed_domains": allowed_domains,
+                "required_permissions": required_permissions
             }
             
             result.append(plugin_data)
@@ -159,7 +148,7 @@ async def upload_plugin(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin)
 ):
-    """上传新插件"""
+    """上传新插件 - 修复版本（真正解析插件）"""
     
     try:
         # 验证文件类型
@@ -173,43 +162,75 @@ async def upload_plugin(
         plugin_dir = "app/plugins/crawlers/"
         os.makedirs(plugin_dir, exist_ok=True)
         
-        # 保存文件
-        file_path = os.path.join(plugin_dir, plugin_file.filename)
-        with open(file_path, "wb") as f:
+        # 保存临时文件用于解析
+        temp_file_path = os.path.join(plugin_dir, f"temp_{plugin_file.filename}")
+        with open(temp_file_path, "wb") as f:
             f.write(content)
         
-        # 解析插件信息 - 简化版本
-        plugin_name = plugin_file.filename.replace('.py', '')
-        
-        # 检查是否已存在
-        existing = db.query(CrawlerPlugin).filter(CrawlerPlugin.name == plugin_name).first()
-        if existing:
-            os.remove(file_path)  # 删除刚上传的文件
-            raise HTTPException(status_code=400, detail="插件已存在")
-        
-        # 创建数据库记录
-        db_plugin = CrawlerPlugin(
-            name=plugin_name,
-            display_name="测试电子元件爬虫",
-            version="1.0.0",
-            description="测试用的电子元件数据爬虫",
-            author="OpenPart Team",
-            data_source="测试电子商城",
-            file_path=file_path,
-            status="inactive",
-            is_active=False,
-            config={}
-        )
-        
-        db.add(db_plugin)
-        db.commit()
-        db.refresh(db_plugin)
-        
-        return {
-            "message": "插件上传成功",
-            "plugin_id": db_plugin.id,
-            "name": db_plugin.name
-        }
+        try:
+            # 使用插件管理器解析插件信息
+            from app.plugins.plugin_manager import plugin_manager
+            
+            print(f"开始解析插件文件: {temp_file_path}")
+            plugin_info = plugin_manager.validate_plugin_file(temp_file_path)
+            print(f"解析到的插件信息: {plugin_info}")
+            
+            plugin_name = plugin_info["name"]
+            
+            # 检查是否已存在
+            existing = db.query(CrawlerPlugin).filter(CrawlerPlugin.name == plugin_name).first()
+            if existing:
+                os.remove(temp_file_path)  # 删除临时文件
+                raise HTTPException(status_code=400, detail=f"插件 '{plugin_name}' 已存在")
+            
+            # 重命名为正式文件名
+            final_file_path = os.path.join(plugin_dir, f"{plugin_name}.py")
+            os.rename(temp_file_path, final_file_path)
+            
+            # 创建数据库记录 - 使用真实解析的信息
+            db_plugin = CrawlerPlugin(
+                name=plugin_name,
+                display_name=plugin_info["display_name"],
+                version=plugin_info["version"],
+                description=plugin_info["description"],
+                author=plugin_info["author"],
+                data_source=plugin_info["data_source"],
+                file_path=final_file_path,
+                status="inactive",
+                is_active=False,
+                config={}
+            )
+            
+            db.add(db_plugin)
+            db.commit()
+            db.refresh(db_plugin)
+            
+            # 尝试加载插件到管理器中
+            try:
+                plugin_manager.load_plugin(plugin_name, final_file_path)
+                print(f"插件已加载到管理器: {plugin_name}")
+            except Exception as load_error:
+                print(f"警告：插件文件已保存但加载到管理器失败: {load_error}")
+                # 不影响主流程，插件文件已保存
+            
+            return {
+                "message": "插件上传成功",
+                "plugin_id": db_plugin.id,
+                "name": db_plugin.name,
+                "display_name": db_plugin.display_name,
+                "version": db_plugin.version,
+                "author": db_plugin.author,
+                "data_source": db_plugin.data_source
+            }
+            
+        except Exception as parse_error:
+            # 删除临时文件
+            if os.path.exists(temp_file_path):
+                os.remove(temp_file_path)
+            raise HTTPException(
+                status_code=400, 
+                detail=f"插件解析失败: {str(parse_error)}"
+            )
         
     except HTTPException:
         raise
@@ -223,53 +244,70 @@ async def get_plugin(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin)
 ):
-    """获取单个插件详情"""
+    """获取单个插件详情 - 修复版本（使用真实配置）"""
     
     plugin = db.query(CrawlerPlugin).filter(CrawlerPlugin.id == plugin_id).first()
     if not plugin:
         raise HTTPException(status_code=404, detail="插件未找到")
     
-    return {
-        "id": plugin.id,
-        "name": plugin.name,
-        "display_name": plugin.display_name,
-        "version": plugin.version,
-        "description": plugin.description,
-        "author": plugin.author,
-        "data_source": plugin.data_source,
-        "status": plugin.status,
-        "is_active": plugin.is_active,
-        "config": plugin.config or {},
-        "created_at": plugin.created_at.isoformat() if plugin.created_at else None,
-        "run_count": plugin.run_count or 0,
-        "success_count": plugin.success_count or 0,
-        "error_count": plugin.error_count or 0,
-        "config_schema": [
-            {
-                "name": "api_base_url",
-                "label": "API基础地址",
-                "type": "url",
-                "required": True,
-                "default": "https://api.test-electronics.com",
-                "help_text": "测试电商API的基础地址"
-            },
-            {
-                "name": "category_filter",
-                "label": "零件类别",
-                "type": "select", 
-                "required": False,
-                "default": "all",
-                "options": [
-                    {"value": "all", "label": "所有类别"},
-                    {"value": "resistor", "label": "电阻器"},
-                    {"value": "capacitor", "label": "电容器"}
-                ],
-                "help_text": "选择要爬取的零件类别"
-            }
-        ],
-        "allowed_domains": ["test-electronics.com"],
-        "required_permissions": ["network"]
-    }
+    try:
+        # 尝试从插件管理器获取真实的配置schema
+        from app.plugins.plugin_manager import plugin_manager
+        
+        plugin_instance = plugin_manager.get_plugin(plugin.name)
+        config_schema = []
+        allowed_domains = []
+        required_permissions = ["network"]
+        
+        if plugin_instance:
+            # 使用真实的插件配置
+            config_schema = [field.dict() for field in plugin_instance.config_schema]
+            allowed_domains = plugin_instance.get_allowed_domains()
+            required_permissions = plugin_instance.get_required_permissions()
+        else:
+            # 如果插件未加载，尝试重新加载
+            try:
+                plugin_instance = plugin_manager.load_plugin(plugin.name, plugin.file_path)
+                config_schema = [field.dict() for field in plugin_instance.config_schema]
+                allowed_domains = plugin_instance.get_allowed_domains()
+                required_permissions = plugin_instance.get_required_permissions()
+            except Exception as load_error:
+                print(f"无法加载插件 {plugin.name}: {load_error}")
+                # 使用默认配置
+                config_schema = [
+                    {
+                        "name": "api_base_url",
+                        "label": "API基础地址",
+                        "type": "url",
+                        "required": True,
+                        "default": "",
+                        "help_text": "请配置API基础地址"
+                    }
+                ]
+        
+        return {
+            "id": plugin.id,
+            "name": plugin.name,
+            "display_name": plugin.display_name,
+            "version": plugin.version,
+            "description": plugin.description,
+            "author": plugin.author,
+            "data_source": plugin.data_source,
+            "status": plugin.status,
+            "is_active": plugin.is_active,
+            "config": plugin.config or {},
+            "created_at": plugin.created_at.isoformat() if plugin.created_at else None,
+            "run_count": plugin.run_count or 0,
+            "success_count": plugin.success_count or 0,
+            "error_count": plugin.error_count or 0,
+            "config_schema": config_schema,
+            "allowed_domains": allowed_domains,
+            "required_permissions": required_permissions
+        }
+        
+    except Exception as e:
+        print(f"获取插件详情失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取插件详情失败: {str(e)}")
 
 @router.put("/{plugin_id}/config")
 async def update_plugin_config(

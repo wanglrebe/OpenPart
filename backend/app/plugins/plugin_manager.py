@@ -139,58 +139,130 @@ class PluginManager:
         os.makedirs(self.plugin_directory, exist_ok=True)
     
     def validate_plugin_file(self, file_path: str) -> Dict[str, Any]:
-        """验证插件文件并返回插件信息"""
+        """验证插件文件并返回插件信息 - 调试版本"""
         
         try:
+            print(f"开始验证插件文件: {file_path}")
+            
             # 安全验证
+            print("1. 执行安全验证...")
             self.security_validator.validate_plugin_code(file_path)
+            print("   ✓ 安全验证通过")
             
             # 加载模块获取信息
+            print("2. 加载插件模块...")
             spec = importlib.util.spec_from_file_location("temp_plugin", file_path)
             if not spec or not spec.loader:
                 raise ValueError("无法加载插件文件")
             
+            print("   ✓ 模块规范创建成功")
+            
             module = importlib.util.module_from_spec(spec)
+            print("   ✓ 模块对象创建成功")
+            
             spec.loader.exec_module(module)
+            print("   ✓ 模块执行成功")
             
             # 查找插件类
+            print("3. 查找插件实例...")
             plugin_instance = None
+            
             if hasattr(module, 'plugin'):
+                print("   → 找到 'plugin' 属性")
                 plugin_instance = module.plugin
+                print(f"   → plugin 类型: {type(plugin_instance)}")
             else:
+                print("   → 未找到 'plugin' 属性，搜索插件类...")
                 # 查找继承自BaseCrawlerPlugin的类
                 for item_name in dir(module):
                     item = getattr(module, item_name)
-                    if (isinstance(item, type) and 
-                        issubclass(item, BaseCrawlerPlugin) and 
-                        item != BaseCrawlerPlugin):
-                        plugin_instance = item()
+                    print(f"   → 检查项目: {item_name} = {type(item)}")
+                    
+                    if isinstance(item, type):
+                        print(f"     → {item_name} 是类型")
+                        try:
+                            # 检查是否继承自BaseCrawlerPlugin
+                            if hasattr(item, '__bases__'):
+                                print(f"     → {item_name} 的基类: {item.__bases__}")
+                                for base in item.__bases__:
+                                    print(f"       → 基类名称: {base.__name__}")
+                                    if base.__name__ == 'BaseCrawlerPlugin':
+                                        print(f"     → ✓ 找到插件类: {item_name}")
+                                        plugin_instance = item()
+                                        break
+                        except Exception as e:
+                            print(f"     → 检查类 {item_name} 时出错: {e}")
+                            continue
+                    
+                    if plugin_instance:
                         break
             
             if not plugin_instance:
-                raise ValueError("未找到有效的插件类")
+                available_items = [name for name in dir(module) if not name.startswith('_')]
+                raise ValueError(f"未找到有效的插件类。模块中可用的项目: {available_items}")
+            
+            print(f"   ✓ 插件实例创建成功: {type(plugin_instance)}")
             
             # 获取插件信息
-            plugin_info = plugin_instance.plugin_info
+            print("4. 获取插件信息...")
+            try:
+                plugin_info = plugin_instance.plugin_info
+                print(f"   ✓ 插件信息获取成功: {type(plugin_info)}")
+                print(f"   → 插件信息内容: {plugin_info}")
+            except Exception as e:
+                print(f"   ✗ 获取插件信息失败: {e}")
+                import traceback
+                traceback.print_exc()
+                raise ValueError(f"获取插件信息失败: {str(e)}")
             
-            return {
+            # 获取配置schema
+            print("5. 获取配置schema...")
+            try:
+                config_schema = plugin_instance.config_schema
+                print(f"   ✓ 配置schema获取成功，字段数量: {len(config_schema)}")
+            except Exception as e:
+                print(f"   ✗ 获取配置schema失败: {e}")
+                import traceback
+                traceback.print_exc()
+                raise ValueError(f"获取配置schema失败: {str(e)}")
+            
+            # 验证必要字段
+            print("6. 验证插件信息字段...")
+            required_fields = ['name', 'version', 'description', 'author', 'data_source']
+            for field in required_fields:
+                if not hasattr(plugin_info, field):
+                    raise ValueError(f"插件信息缺少必要字段: {field}")
+                value = getattr(plugin_info, field)
+                print(f"   → {field}: {value}")
+                if not value:
+                    raise ValueError(f"插件信息字段 {field} 不能为空")
+            
+            # 构建返回结果
+            print("7. 构建返回结果...")
+            result = {
                 "name": plugin_info.name.replace(" ", "_").lower(),  # 标准化名称
                 "display_name": plugin_info.name,
                 "version": plugin_info.version,
                 "description": plugin_info.description,
                 "author": plugin_info.author,
                 "data_source": plugin_info.data_source,
-                "data_source_type": plugin_info.data_source_type.value,
-                "homepage": plugin_info.homepage,
-                "terms_url": plugin_info.terms_url,
-                "rate_limit": plugin_info.rate_limit,
-                "batch_size": plugin_info.batch_size,
-                "config_schema": [field.dict() for field in plugin_instance.config_schema],
+                "data_source_type": plugin_info.data_source_type.value if hasattr(plugin_info, 'data_source_type') else "other",
+                "homepage": getattr(plugin_info, 'homepage', None),
+                "terms_url": getattr(plugin_info, 'terms_url', None),
+                "rate_limit": getattr(plugin_info, 'rate_limit', None),
+                "batch_size": getattr(plugin_info, 'batch_size', 50),
+                "config_schema": [field.dict() for field in config_schema],
                 "allowed_domains": plugin_instance.get_allowed_domains(),
                 "required_permissions": plugin_instance.get_required_permissions()
             }
             
+            print(f"   ✓ 验证完成，返回结果: {result}")
+            return result
+            
         except Exception as e:
+            print(f"✗ 插件验证失败: {str(e)}")
+            import traceback
+            traceback.print_exc()
             logger.error(f"插件验证失败: {e}")
             raise ValueError(f"插件验证失败: {str(e)}")
     

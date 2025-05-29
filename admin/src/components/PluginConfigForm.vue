@@ -1,4 +1,4 @@
-<!-- 最终修复版本 - 将测试方法作为 prop 传入而不是 emit -->
+<!-- admin/src/components/PluginConfigForm.vue - 完整版（支持文件上传） -->
 <template>
   <div class="plugin-config-form">
     <!-- 插件信息展示 -->
@@ -316,6 +316,62 @@
               </div>
             </el-form-item>
 
+            <!-- 文件上传 - 新增 -->
+            <el-form-item 
+              v-else-if="field.type === 'file'"
+              :label="field.label"
+              :prop="field.name"
+              :required="field.required"
+            >
+              <div class="file-upload-field">
+                <!-- 显示当前文件信息 -->
+                <div v-if="formData[field.name + '_info']" class="current-file-info">
+                  <el-tag type="success" closable @close="clearUploadedFile(field.name)">
+                    <el-icon><Document /></el-icon>
+                    {{ formData[field.name + '_info'].filename }}
+                    ({{ formatFileSize(formData[field.name + '_info'].file_size) }})
+                  </el-tag>
+                  <div class="file-upload-time">
+                    上传时间: {{ formatUploadTime(formData[field.name + '_info'].uploaded_at) }}
+                  </div>
+                </div>
+                
+                <!-- 文件上传组件 -->
+                <el-upload
+                  class="plugin-file-uploader"
+                  :action="uploadUrl"
+                  :headers="uploadHeaders"
+                  :data="{ field_name: field.name }"
+                  :accept="field.validation?.accept || '*'"
+                  :limit="1"
+                  :on-success="(response) => handleFileUploadSuccess(response, field.name)"
+                  :on-error="(error) => handleFileUploadError(error, field.name)"
+                  :before-upload="(file) => beforeFileUpload(file, field)"
+                  :show-file-list="false"
+                  :disabled="uploading[field.name]"
+                >
+                  <el-button :loading="uploading[field.name]" :disabled="uploading[field.name]">
+                    <el-icon><Upload /></el-icon>
+                    {{ uploading[field.name] ? '上传中...' : '选择文件' }}
+                  </el-button>
+                </el-upload>
+                
+                <div v-if="field.help_text" class="help-text">
+                  {{ field.help_text }}
+                </div>
+                
+                <!-- 文件类型和大小限制说明 -->
+                <div class="file-constraints">
+                  <div v-if="field.validation?.accept" class="file-accept-info">
+                    支持格式: {{ field.validation.accept }}
+                  </div>
+                  <div v-if="field.validation?.max_size" class="file-size-info">
+                    最大大小: {{ formatFileSize(field.validation.max_size) }}
+                  </div>
+                </div>
+              </div>
+            </el-form-item>
+
             <!-- 不支持的字段类型 -->
             <el-form-item 
               v-else
@@ -360,14 +416,17 @@
 
 <script>
 import { ref, reactive, computed, watch, onMounted } from 'vue'
-import { Link, RefreshLeft } from '@element-plus/icons-vue'
+import { Link, RefreshLeft, Document, Upload } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import { auth } from '../utils/auth'
 
 export default {
   name: 'PluginConfigForm',
   components: {
     Link,
-    RefreshLeft
+    RefreshLeft,
+    Document,
+    Upload
   },
   props: {
     plugin: {
@@ -378,7 +437,6 @@ export default {
       type: Object,
       default: () => ({})
     },
-    // 新增：将测试方法作为 prop 传入
     onTest: {
       type: Function,
       required: true
@@ -392,6 +450,13 @@ export default {
     const testResult = ref(null)
     const testing = ref(false)
     const saving = ref(false)
+    
+    // 文件上传相关
+    const uploading = reactive({})
+    const uploadUrl = '/api/admin/files/upload'
+    const uploadHeaders = {
+      'Authorization': `Bearer ${auth.getToken()}`
+    }
 
     // 计算属性
     const configSchema = computed(() => {
@@ -517,6 +582,9 @@ export default {
             case 'number':
               defaultValue = 0
               break
+            case 'file':
+              defaultValue = null
+              break
             default:
               defaultValue = ''
           }
@@ -525,6 +593,12 @@ export default {
         formData[field.name] = props.config[field.name] !== undefined 
           ? props.config[field.name] 
           : defaultValue
+          
+        // 文件字段的附加信息
+        if (field.type === 'file') {
+          formData[field.name + '_info'] = props.config[field.name + '_info'] || null
+          uploading[field.name] = false
+        }
       })
       
       // 保存原始配置用于对比
@@ -537,7 +611,7 @@ export default {
       testResult.value = null
     }
 
-    // 测试连接 - 最终修复版本
+    // 测试连接
     const testConnection = async () => {
       // 先验证表单
       try {
@@ -552,13 +626,9 @@ export default {
       
       try {
         console.log('发送测试请求，配置:', { ...formData })
-        
-        // 直接调用传入的测试方法
         const result = await props.onTest({ ...formData })
-        
         console.log('收到测试结果:', result)
         
-        // 确保result是一个对象且有success属性  
         if (result && typeof result === 'object' && 'success' in result) {
           testResult.value = result
           
@@ -605,6 +675,86 @@ export default {
     // 处理取消按钮
     const handleCancel = () => {
       emit('cancel')
+    }
+
+    // 文件上传相关方法
+    const beforeFileUpload = (file, field) => {
+      console.log('准备上传文件:', file.name, '字段:', field.name)
+      
+      // 检查文件大小
+      if (field.validation?.max_size && file.size > field.validation.max_size) {
+        ElMessage.error(`文件大小超过限制 (${formatFileSize(field.validation.max_size)})`)
+        return false
+      }
+      
+      // 检查文件类型
+      if (field.validation?.accept) {
+        const acceptTypes = field.validation.accept.split(',').map(type => type.trim())
+        const fileExt = '.' + file.name.split('.').pop().toLowerCase()
+        const isAccepted = acceptTypes.some(type => {
+          if (type.startsWith('.')) {
+            return type.toLowerCase() === fileExt
+          }
+          return file.type.includes(type)
+        })
+        
+        if (!isAccepted) {
+          ElMessage.error(`不支持的文件类型，支持: ${field.validation.accept}`)
+          return false
+        }
+      }
+      
+      uploading[field.name] = true
+      return true
+    }
+
+    const handleFileUploadSuccess = (response, fieldName) => {
+      console.log('文件上传成功:', response)
+      uploading[fieldName] = false
+      
+      if (response.success) {
+        // 保存文件ID和信息
+        formData[fieldName] = response.file_id
+        formData[fieldName + '_info'] = {
+          file_id: response.file_id,
+          filename: response.filename,
+          file_size: response.file_size,
+          content_type: response.content_type,
+          download_url: response.download_url,
+          uploaded_at: new Date().toISOString()
+        }
+        
+        ElMessage.success(`文件上传成功: ${response.filename}`)
+      } else {
+        ElMessage.error('文件上传失败: ' + response.message)
+      }
+    }
+
+    const handleFileUploadError = (error, fieldName) => {
+      console.error('文件上传失败:', error)
+      uploading[fieldName] = false
+      ElMessage.error('文件上传失败，请重试')
+    }
+
+    const clearUploadedFile = (fieldName) => {
+      // 清空文件相关数据
+      formData[fieldName] = null
+      formData[fieldName + '_info'] = null
+      ElMessage.info('已清除上传的文件')
+    }
+
+    // 工具函数
+    const formatFileSize = (bytes) => {
+      if (!bytes) return '0 B'
+      const k = 1024
+      const sizes = ['B', 'KB', 'MB', 'GB']
+      const i = Math.floor(Math.log(bytes) / Math.log(k))
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+    }
+
+    const formatUploadTime = (timeString) => {
+      if (!timeString) return ''
+      return new Date(timeString).toLocaleString('zh-CN')
     }
 
     // JSON相关方法
@@ -657,6 +807,11 @@ export default {
       hasValidConfig,
       hasChanges,
       
+      // 文件上传相关
+      uploading,
+      uploadUrl,
+      uploadHeaders,
+      
       // 方法
       resetConfig,
       testConnection,
@@ -664,7 +819,15 @@ export default {
       handleCancel,
       formatJson,
       validateJson,
-      getPermissionText
+      getPermissionText,
+      
+      // 文件上传方法
+      beforeFileUpload,
+      handleFileUploadSuccess,
+      handleFileUploadError,
+      clearUploadedFile,
+      formatFileSize,
+      formatUploadTime
     }
   }
 }
@@ -783,6 +946,44 @@ export default {
   gap: 10px;
 }
 
+/* 文件上传相关样式 */
+.file-upload-field {
+  width: 100%;
+}
+
+.current-file-info {
+  margin-bottom: 10px;
+  padding: 10px;
+  background: #f0f9ff;
+  border: 1px solid #e1f5fe;
+  border-radius: 4px;
+}
+
+.file-upload-time {
+  font-size: 12px;
+  color: #666;
+  margin-top: 5px;
+}
+
+.plugin-file-uploader .el-upload {
+  width: 100%;
+}
+
+.plugin-file-uploader .el-button {
+  width: 100%;
+}
+
+.file-constraints {
+  margin-top: 8px;
+}
+
+.file-accept-info,
+.file-size-info {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 3px;
+}
+
 .config-preview-section {
   margin-top: 20px;
 }
@@ -818,5 +1019,14 @@ export default {
 
 :deep(.el-alert__description) {
   font-size: 14px;
+}
+
+:deep(.el-upload-dragger) {
+  width: 100%;
+}
+
+:deep(.el-divider__text) {
+  font-weight: bold;
+  color: #303133;
 }
 </style>

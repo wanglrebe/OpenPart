@@ -7,16 +7,50 @@
         <template #header>
           <div class="card-header">
             <span>零件管理</span>
-            <el-button type="primary" @click="showAddDialog = true">
-              <el-icon><Plus /></el-icon>
-              添加零件
-            </el-button>
+            <div class="header-actions">
+              <el-button type="primary" @click="showAddDialog = true">
+                <el-icon><Plus /></el-icon>
+                添加零件
+              </el-button>
+              
+              <!-- 批量操作按钮 -->
+              <el-dropdown 
+                v-if="selectedParts.length > 0" 
+                @command="handleBatchCommand"
+                class="batch-actions"
+              >
+                <el-button type="warning">
+                  批量操作 ({{ selectedParts.length }})
+                  <el-icon><ArrowDown /></el-icon>
+                </el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="export">
+                      <el-icon><Download /></el-icon>
+                      导出选中项
+                    </el-dropdown-item>
+                    <el-dropdown-item command="batch-edit">
+                      <el-icon><Edit /></el-icon>
+                      批量编辑
+                    </el-dropdown-item>
+                    <el-dropdown-item command="batch-category">
+                      <el-icon><Collection /></el-icon>
+                      批量设置类别
+                    </el-dropdown-item>
+                    <el-dropdown-item command="batch-delete" divided>
+                      <el-icon><Delete /></el-icon>
+                      批量删除
+                    </el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
           </div>
         </template>
         
         <!-- 搜索栏 -->
         <el-row :gutter="20" class="search-bar">
-          <el-col :span="8">
+          <el-col :span="6">
             <el-input
               v-model="searchName"
               placeholder="搜索零件名称"
@@ -28,7 +62,7 @@
               </template>
             </el-input>
           </el-col>
-          <el-col :span="8">
+          <el-col :span="6">
             <el-select
               v-model="searchCategory"
               placeholder="选择类别"
@@ -43,14 +77,29 @@
               />
             </el-select>
           </el-col>
-          <el-col :span="8">
+          <el-col :span="6">
             <el-button @click="resetSearch">重置</el-button>
             <el-button type="primary" @click="searchParts">搜索</el-button>
           </el-col>
+          <el-col :span="6" class="selection-info">
+            <span v-if="selectedParts.length > 0" class="selection-text">
+              已选择 {{ selectedParts.length }} 项
+              <el-button type="text" @click="clearSelection">清空选择</el-button>
+            </span>
+          </el-col>
         </el-row>
         
-        <!-- 零件表格 -->
-        <el-table :data="parts" style="width: 100%" v-loading="loading">
+        <!-- 零件表格 - 添加选择列 -->
+        <el-table 
+          :data="parts" 
+          style="width: 100%" 
+          v-loading="loading"
+          @selection-change="handleSelectionChange"
+          ref="partsTableRef"
+        >
+          <!-- 选择列 -->
+          <el-table-column type="selection" width="55" />
+          
           <el-table-column prop="id" label="ID" width="80" />
           <el-table-column prop="name" label="名称" />
           <el-table-column prop="category" label="类别" />
@@ -202,17 +251,121 @@
         <img :src="previewImageUrl" class="preview-image" />
       </div>
     </el-dialog>
+
+
+    <!-- 批量编辑对话框 -->
+    <el-dialog
+      title="批量编辑零件"
+      v-model="showBatchEditDialog"
+      width="600px"
+      :close-on-click-modal="false"
+    >
+      <el-alert
+        type="info"
+        :title="`将对 ${selectedParts.length} 个零件进行批量编辑`"
+        :closable="false"
+        show-icon
+        style="margin-bottom: 20px"
+      />
+      
+      <el-form :model="batchEditForm" label-width="100px">
+        <el-form-item label="类别">
+          <el-input 
+            v-model="batchEditForm.category" 
+            placeholder="留空表示不修改"
+          />
+        </el-form-item>
+        <el-form-item label="描述前缀">
+          <el-input 
+            v-model="batchEditForm.descriptionPrefix" 
+            placeholder="为所有选中零件的描述添加前缀"
+          />
+        </el-form-item>
+        <el-form-item label="描述后缀">
+          <el-input 
+            v-model="batchEditForm.descriptionSuffix" 
+            placeholder="为所有选中零件的描述添加后缀"
+          />
+        </el-form-item>
+        <el-form-item label="批量属性">
+          <div v-for="(prop, index) in batchEditForm.properties" :key="index" class="property-item">
+            <el-input v-model="prop.key" placeholder="属性名" style="width: 180px" />
+            <el-input v-model="prop.value" placeholder="属性值" style="width: 180px; margin-left: 10px" />
+            <el-button 
+              @click="removeBatchProperty(index)" 
+              type="danger" 
+              size="small" 
+              style="margin-left: 10px"
+            >
+              删除
+            </el-button>
+          </div>
+          <el-button @click="addBatchProperty" type="primary" size="small">
+            添加属性
+          </el-button>
+        </el-form-item>
+      </el-form>
+      
+      <template #footer>
+        <el-button @click="showBatchEditDialog = false">取消</el-button>
+        <el-button type="primary" @click="executeBatchEdit" :loading="batchOperating">
+          {{ batchOperating ? '处理中...' : '确认修改' }}
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 批量设置类别对话框 -->
+    <el-dialog
+      title="批量设置类别"
+      v-model="showBatchCategoryDialog"
+      width="400px"
+    >
+      <el-alert
+        type="info"
+        :title="`将为 ${selectedParts.length} 个零件设置类别`"
+        :closable="false"
+        show-icon
+        style="margin-bottom: 20px"
+      />
+      
+      <el-form>
+        <el-form-item label="新类别">
+          <el-select
+            v-model="batchCategoryValue"
+            placeholder="选择或输入新类别"
+            filterable
+            allow-create
+            style="width: 100%"
+          >
+            <el-option
+              v-for="category in categories"
+              :key="category"
+              :label="category"
+              :value="category"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      
+      <template #footer>
+        <el-button @click="showBatchCategoryDialog = false">取消</el-button>
+        <el-button type="primary" @click="executeBatchCategory" :loading="batchOperating">
+          {{ batchOperating ? '设置中...' : '确认设置' }}
+        </el-button>
+      </template>
+    </el-dialog>
+
   </div>
 </template>
 
 <script>
 import { ref, reactive, onMounted } from 'vue'
-import { Plus, Search, Picture } from '@element-plus/icons-vue'
+import { Plus, Search, Picture, Download, Edit, Collection, Delete, ArrowDown } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import NavBar from '../components/NavBar.vue'
 import { partsAPI } from '../utils/api'
-import { auth } from '../utils/auth'  // 添加这行
-import axios from 'axios'  // 如果还没有的话也添加这行
+import { auth } from '../utils/auth'
+import axios from 'axios'
 
 export default {
   name: 'PartsAdmin',
@@ -220,10 +373,15 @@ export default {
     NavBar,
     Plus,
     Search,
-    Plus,
-    Picture
+    Picture,
+    Download,
+    Edit,
+    Collection,
+    Delete,
+    ArrowDown
   },
   setup() {
+    // 现有的响应式变量...
     const parts = ref([])
     const categories = ref([])
     const loading = ref(false)
@@ -232,24 +390,39 @@ export default {
     const editingPart = ref(null)
     const partFormRef = ref()
     
-    // 搜索相关
     const searchName = ref('')
     const searchCategory = ref('')
     
-    // 分页相关
     const currentPage = ref(1)
     const pageSize = ref(20)
     const total = ref(0)
     
-    // 表单数据
     const partForm = reactive({
       name: '',
       category: '',
       description: '',
       properties: []
     })
+
+    // 批量操作相关的新变量
+    const selectedParts = ref([])
+    const partsTableRef = ref()
+    const batchOperating = ref(false)
     
-    // 加载零件列表
+    // 批量编辑相关
+    const showBatchEditDialog = ref(false)
+    const batchEditForm = reactive({
+      category: '',
+      descriptionPrefix: '',
+      descriptionSuffix: '',
+      properties: []
+    })
+    
+    // 批量设置类别相关
+    const showBatchCategoryDialog = ref(false)
+    const batchCategoryValue = ref('')
+
+    // 现有方法保持不变...
     const loadParts = async () => {
       loading.value = true
       try {
@@ -265,7 +438,6 @@ export default {
         const response = await partsAPI.getParts(params)
         let partsData = response.data
         
-        // 前端过滤名称（因为后端可能不支持名称搜索）
         if (searchName.value) {
           partsData = partsData.filter(p => 
             p.name.toLowerCase().includes(searchName.value.toLowerCase())
@@ -273,9 +445,10 @@ export default {
         }
         
         parts.value = partsData
-        total.value = partsData.length
         
-        // 提取所有类别
+        // 获取总数
+        await loadTotalCount()
+        
         const allCategories = new Set(partsData.map(p => p.category).filter(Boolean))
         categories.value = Array.from(allCategories)
         
@@ -285,14 +458,246 @@ export default {
       }
       loading.value = false
     }
-    
-    // 搜索零件
+
+    const loadTotalCount = async () => {
+      try {
+        const params = {}
+        if (searchCategory.value) {
+          params.category = searchCategory.value
+        }
+        
+        const countResponse = await partsAPI.getParts({ 
+          ...params, 
+          limit: 10000
+        })
+        
+        let totalData = countResponse.data
+        
+        if (searchName.value) {
+          totalData = totalData.filter(p => 
+            p.name.toLowerCase().includes(searchName.value.toLowerCase())
+          )
+        }
+        
+        total.value = totalData.length
+        
+      } catch (error) {
+        console.error('获取总数失败:', error)
+        total.value = 0
+      }
+    }
+
+    // 新增：批量操作相关方法
+    const handleSelectionChange = (selection) => {
+      selectedParts.value = selection
+      console.log(`选中了 ${selection.length} 个零件`)
+    }
+
+    const clearSelection = () => {
+      partsTableRef.value.clearSelection()
+      selectedParts.value = []
+    }
+
+    const handleBatchCommand = (command) => {
+      if (selectedParts.value.length === 0) {
+        ElMessage.warning('请先选择要操作的零件')
+        return
+      }
+
+      switch (command) {
+        case 'export':
+          exportSelectedParts()
+          break
+        case 'batch-edit':
+          showBatchEditDialog.value = true
+          break
+        case 'batch-category':
+          showBatchCategoryDialog.value = true
+          break
+        case 'batch-delete':
+          batchDeleteParts()
+          break
+      }
+    }
+
+    // 导出选中零件
+    const exportSelectedParts = async () => {
+      try {
+        const partIds = selectedParts.value.map(p => p.id)
+        
+        ElMessage.info('正在导出选中的零件...')
+        
+        // 调用导出API
+        const response = await axios.post('/api/admin/import-export/export', {
+          format: 'json',
+          include_images: true,
+          part_ids: partIds  // 传递选中的零件ID
+        }, {
+          headers: { Authorization: `Bearer ${auth.getToken()}` },
+          responseType: 'blob'
+        })
+        
+        // 下载文件
+        const blob = new Blob([response.data])
+        const url = window.URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        
+        const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-')
+        link.download = `selected_parts_${timestamp}.json`
+        
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        window.URL.revokeObjectURL(url)
+        
+        ElMessage.success(`成功导出 ${selectedParts.value.length} 个零件`)
+        
+      } catch (error) {
+        ElMessage.error('导出失败: ' + (error.response?.data?.detail || error.message))
+      }
+    }
+
+    // 批量删除零件
+    const batchDeleteParts = async () => {
+      try {
+        await ElMessageBox.confirm(
+          `确定要删除选中的 ${selectedParts.value.length} 个零件吗？此操作不可撤销。`,
+          '批量删除确认',
+          {
+            confirmButtonText: '确定删除',
+            cancelButtonText: '取消',
+            type: 'warning'
+          }
+        )
+        
+        batchOperating.value = true
+        const deletePromises = selectedParts.value.map(part => 
+          partsAPI.deletePart(part.id)
+        )
+        
+        await Promise.all(deletePromises)
+        
+        ElMessage.success(`成功删除 ${selectedParts.value.length} 个零件`)
+        clearSelection()
+        loadParts()
+        
+      } catch (error) {
+        if (error !== 'cancel') {
+          ElMessage.error('批量删除失败')
+          console.error(error)
+        }
+      }
+      batchOperating.value = false
+    }
+
+    // 执行批量编辑
+    const executeBatchEdit = async () => {
+      try {
+        batchOperating.value = true
+        
+        const updatePromises = selectedParts.value.map(async (part) => {
+          const updateData = {}
+          
+          // 设置类别
+          if (batchEditForm.category) {
+            updateData.category = batchEditForm.category
+          }
+          
+          // 处理描述
+          if (batchEditForm.descriptionPrefix || batchEditForm.descriptionSuffix) {
+            let newDescription = part.description || ''
+            if (batchEditForm.descriptionPrefix) {
+              newDescription = batchEditForm.descriptionPrefix + newDescription
+            }
+            if (batchEditForm.descriptionSuffix) {
+              newDescription = newDescription + batchEditForm.descriptionSuffix
+            }
+            updateData.description = newDescription
+          }
+          
+          // 处理属性
+          if (batchEditForm.properties.length > 0) {
+            const newProperties = { ...(part.properties || {}) }
+            batchEditForm.properties.forEach(prop => {
+              if (prop.key && prop.value) {
+                newProperties[prop.key] = prop.value
+              }
+            })
+            updateData.properties = newProperties
+          }
+          
+          if (Object.keys(updateData).length > 0) {
+            return partsAPI.updatePart(part.id, updateData)
+          }
+        })
+        
+        await Promise.all(updatePromises)
+        
+        ElMessage.success(`成功批量编辑 ${selectedParts.value.length} 个零件`)
+        showBatchEditDialog.value = false
+        resetBatchEditForm()
+        clearSelection()
+        loadParts()
+        
+      } catch (error) {
+        ElMessage.error('批量编辑失败')
+        console.error(error)
+      }
+      batchOperating.value = false
+    }
+
+    // 执行批量设置类别
+    const executeBatchCategory = async () => {
+      if (!batchCategoryValue.value) {
+        ElMessage.error('请输入新类别')
+        return
+      }
+      
+      try {
+        batchOperating.value = true
+        
+        const updatePromises = selectedParts.value.map(part => 
+          partsAPI.updatePart(part.id, { category: batchCategoryValue.value })
+        )
+        
+        await Promise.all(updatePromises)
+        
+        ElMessage.success(`成功为 ${selectedParts.value.length} 个零件设置类别`)
+        showBatchCategoryDialog.value = false
+        batchCategoryValue.value = ''
+        clearSelection()
+        loadParts()
+        
+      } catch (error) {
+        ElMessage.error('批量设置类别失败')
+        console.error(error)
+      }
+      batchOperating.value = false
+    }
+
+    // 批量编辑表单相关方法
+    const addBatchProperty = () => {
+      batchEditForm.properties.push({ key: '', value: '' })
+    }
+
+    const removeBatchProperty = (index) => {
+      batchEditForm.properties.splice(index, 1)
+    }
+
+    const resetBatchEditForm = () => {
+      batchEditForm.category = ''
+      batchEditForm.descriptionPrefix = ''
+      batchEditForm.descriptionSuffix = ''
+      batchEditForm.properties = []
+    }
+
+    // 现有方法保持不变...
     const searchParts = () => {
       currentPage.value = 1
       loadParts()
     }
     
-    // 重置搜索
     const resetSearch = () => {
       searchName.value = ''
       searchCategory.value = ''
@@ -400,16 +805,18 @@ export default {
       return new Date(dateString).toLocaleString('zh-CN')
     }
     
-    // 分页处理
+    // 修复分页处理方法
     const handleSizeChange = (val) => {
+      console.log(`页大小变更: ${pageSize.value} -> ${val}`)
       pageSize.value = val
-      currentPage.value = 1
+      currentPage.value = 1  // 重置到第一页
       loadParts()
     }
     
     const handleCurrentChange = (val) => {
+      console.log(`页码变更: ${currentPage.value} -> ${val}`)
       currentPage.value = val
-      loadParts()
+      loadParts()  // 重新加载数据
     }
     
     // 监听对话框关闭
@@ -504,7 +911,10 @@ export default {
       pageSize,
       total,
       partForm,
+      
+      // 方法
       loadParts,
+      loadTotalCount,  // 新增
       searchParts,
       resetSearch,
       editPart,
@@ -516,6 +926,8 @@ export default {
       formatDate,
       handleSizeChange,
       handleCurrentChange,
+      
+      // 其他已有方法...
       handleDialogClose,
       showImageDialog,
       showPreviewDialog,
@@ -528,7 +940,28 @@ export default {
       beforeImageUpload,
       handleUploadSuccess,
       handleUploadError,
-      deleteImage
+      deleteImage,
+
+      // 批量操作变量
+      selectedParts,
+      partsTableRef,
+      batchOperating,
+      showBatchEditDialog,
+      batchEditForm,
+      showBatchCategoryDialog,
+      batchCategoryValue,
+
+      // 批量操作方法
+      handleSelectionChange,
+      clearSelection,
+      handleBatchCommand,
+      exportSelectedParts,
+      batchDeleteParts,
+      executeBatchEdit,
+      executeBatchCategory,
+      addBatchProperty,
+      removeBatchProperty,
+      resetBatchEditForm,
     }
   }
 }
@@ -667,5 +1100,30 @@ export default {
   max-height: 500px;
   object-fit: contain;
   border-radius: 8px;
+}
+.batch-actions {
+  margin-left: 10px;
+}
+
+.selection-info {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.selection-text {
+  color: #409eff;
+  font-size: 14px;
+}
+
+.property-item {
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
 }
 </style>

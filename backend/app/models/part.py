@@ -15,6 +15,7 @@ class Part(Base):
     image_url = Column(String(500))
     
     # 爬虫数据源相关字段
+    external_id = Column(String(255), index=True)  # 外部系统ID
     data_source = Column(String(200))              # 数据来源
     source_url = Column(String(500))               # 原始URL
     crawl_time = Column(DateTime(timezone=True))   # 爬取时间

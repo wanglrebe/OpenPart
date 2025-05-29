@@ -570,7 +570,7 @@ async def execute_task(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin)
 ):
-    """执行任务 - 真实执行版本"""
+    """执行任务 - 直接传递用户token"""
     
     task = db.query(CrawlerTask).filter(
         CrawlerTask.id == task_id,
@@ -583,123 +583,182 @@ async def execute_task(
     if task.status == 'running':
         raise HTTPException(status_code=400, detail="任务正在运行中")
     
+    # 获取插件信息
+    plugin = db.query(CrawlerPlugin).filter(CrawlerPlugin.id == plugin_id).first()
+    if not plugin:
+        raise HTTPException(status_code=404, detail="插件未找到")
+    
     try:
         # 更新任务状态
         task.status = 'running'
         task.started_at = datetime.utcnow()
         task.run_count = (task.run_count or 0) + 1
-        
         db.commit()
         
-        # 真实执行插件代码
+        # 真实执行插件代码 - 传递真实token
         import threading
+        from fastapi import Request
         
-        def real_execution():
+        # 从请求中提取token
+        def get_token_from_request():
+            # 这里我们需要从somewhere获取当前请求的token
+            # 一个简单的方法是从当前用户重新生成token
+            from app.auth.security import create_access_token
+            from datetime import timedelta
+            
+            # 重新为当前用户生成token
+            access_token = create_access_token(
+                data={"sub": current_user.username, "role": current_user.role.value}, 
+                expires_delta=timedelta(hours=24)
+            )
+            return access_token
+        
+        user_token = get_token_from_request()
+        print(f"为任务 {task_id} 生成的token: {user_token[:50]}...")  # 只显示前50个字符
+        
+        def real_plugin_execution():
             from app.core.database import SessionLocal
             from app.models.part import Part
+            from app.plugins.plugin_manager import plugin_manager
             
             db_session = SessionLocal()
             try:
-                print(f"开始执行任务 {task_id}...")
+                print(f"开始执行任务 {task_id}，插件: {plugin.name}")
                 
-                # 获取任务和插件
                 current_task = db_session.query(CrawlerTask).filter(CrawlerTask.id == task_id).first()
-                plugin = db_session.query(CrawlerPlugin).filter(CrawlerPlugin.id == plugin_id).first()
+                current_plugin = db_session.query(CrawlerPlugin).filter(CrawlerPlugin.id == plugin_id).first()
                 
-                if not current_task or not plugin:
+                if not current_task or not current_plugin:
                     print("任务或插件未找到")
                     return
                 
-                # 模拟真实的插件执行
-                import time
-                import random
-                from datetime import datetime
-                
                 start_time = datetime.utcnow()
                 logs = []
-                total_data_count = 0
                 
                 try:
-                    logs.append("开始执行爬虫任务...")
-                    time.sleep(2)  # 模拟初始化
+                    logs.append(f"开始执行插件: {current_plugin.display_name}")
                     
-                    logs.append("连接到数据源...")
-                    time.sleep(1)
+                    # 1. 加载插件实例
+                    plugin_instance = plugin_manager.get_plugin(current_plugin.name)
+                    if not plugin_instance:
+                        print(f"插件未加载，尝试重新加载: {current_plugin.name}")
+                        plugin_instance = plugin_manager.load_plugin(current_plugin.name, current_plugin.file_path)
                     
-                    # 模拟生成零件数据
-                    sample_parts = [
-                        {
-                            "name": f"测试电阻 {random.randint(1, 1000)}Ω",
-                            "category": "电阻器",
-                            "description": "测试用电阻器",
-                            "properties": {"阻值": f"{random.randint(1, 1000)}Ω", "功率": "0.25W"}
-                        },
-                        {
-                            "name": f"测试电容 {random.randint(1, 100)}μF",
-                            "category": "电容器", 
-                            "description": "测试用电容器",
-                            "properties": {"容量": f"{random.randint(1, 100)}μF", "电压": "16V"}
-                        }
-                    ]
+                    logs.append("插件加载成功")
                     
-                    logs.append(f"获取到 {len(sample_parts)} 条零件数据")
+                    # 2. 设置插件的管理员token - 使用真实的用户token
+                    if hasattr(plugin_instance, 'set_admin_token'):
+                        plugin_instance.set_admin_token(user_token)
+                        logs.append(f"已设置插件认证token (长度: {len(user_token)})")
+                        print(f"为插件设置token: {user_token[:50]}...")
+                    else:
+                        logs.append("警告: 插件不支持token设置")
+                        print("警告: 插件没有set_admin_token方法")
                     
-                    # 保存到数据库
-                    for part_data in sample_parts:
+                    # 3. 准备配置
+                    config = {}
+                    if execute_data and 'config' in execute_data:
+                        config = execute_data['config']
+                    elif current_task.config:
+                        config = current_task.config
+                    elif current_plugin.config:
+                        config = current_plugin.config
+                    
+                    logs.append(f"配置参数: {len(config)} 项")
+                    print(f"插件配置: {config}")
+                    
+                    # 4. 执行插件爬取
+                    logs.append("开始数据爬取...")
+                    crawl_result = plugin_instance.crawl(config)
+                    
+                    if not crawl_result.success:
+                        raise Exception(f"插件执行失败: {crawl_result.error_message}")
+                    
+                    logs.append(f"爬取完成，获取到 {len(crawl_result.data)} 条数据")
+                    
+                    # 5. 保存数据到数据库
+                    saved_count = 0
+                    skipped_count = 0
+                    
+                    for part_data in crawl_result.data:
                         try:
+                            existing = db_session.query(Part).filter(Part.name == part_data.name).first()
+                            if existing:
+                                skipped_count += 1
+                                continue
+                            
                             new_part = Part(
-                                name=part_data["name"],
-                                category=part_data["category"],
-                                description=part_data["description"],
-                                properties=part_data["properties"],
-                                data_source=plugin.data_source or "测试数据源",
-                                crawl_time=datetime.utcnow(),
-                                crawler_version=plugin.version
+                                name=part_data.name,
+                                category=part_data.category,
+                                description=part_data.description,
+                                properties=part_data.properties,
+                                image_url=part_data.image_url,
+                                external_id=part_data.external_id,
+                                source_url=part_data.source_url
                             )
                             
                             db_session.add(new_part)
-                            total_data_count += 1
+                            saved_count += 1
                             
                         except Exception as e:
-                            print(f"保存零件失败: {e}")
-                            logs.append(f"保存零件失败: {str(e)}")
+                            print(f"保存零件失败: {part_data.name} - {str(e)}")
+                            logs.append(f"保存零件失败: {part_data.name}")
                     
                     db_session.commit()
-                    logs.append(f"成功保存 {total_data_count} 条零件数据")
+                    logs.append(f"数据保存完成: 新增 {saved_count} 条，跳过 {skipped_count} 条")
+                    
+                    # 添加警告信息
+                    if crawl_result.warnings:
+                        for warning in crawl_result.warnings:
+                            logs.append(f"警告: {warning}")
                     
                     # 更新任务状态为完成
                     current_task.status = 'completed'
                     current_task.finished_at = datetime.utcnow()
                     current_task.execution_time = (current_task.finished_at - start_time).total_seconds()
-                    current_task.data_count = total_data_count
-                    current_task.success_count = total_data_count
-                    current_task.error_count = 0
+                    current_task.data_count = len(crawl_result.data)
+                    current_task.success_count = saved_count
+                    current_task.error_count = len(crawl_result.data) - saved_count
                     current_task.logs = logs
                     
-                    print(f"任务 {task_id} 执行完成，添加了 {total_data_count} 条数据")
+                    # 更新插件统计
+                    current_plugin.run_count = (current_plugin.run_count or 0) + 1
+                    current_plugin.success_count = (current_plugin.success_count or 0) + saved_count
+                    current_plugin.last_run_at = datetime.utcnow()
+                    
+                    print(f"任务 {task_id} 执行完成，处理了 {len(crawl_result.data)} 条数据，保存了 {saved_count} 条")
                     
                 except Exception as e:
-                    print(f"任务执行异常: {e}")
+                    print(f"插件执行异常: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    
                     current_task.status = 'failed'
-                    current_task.finished_at = datetime.utcnow()
+                    current_task.finished_at = datetime.utcnow()  
+                    current_task.execution_time = (current_task.finished_at - start_time).total_seconds()
                     current_task.error_message = str(e)
                     current_task.logs = logs + [f"执行失败: {str(e)}"]
+                    
+                    current_plugin.error_count = (current_plugin.error_count or 0) + 1
                 
                 db_session.commit()
                 
             except Exception as e:
                 print(f"任务执行严重错误: {e}")
+                import traceback
+                traceback.print_exc()
             finally:
                 db_session.close()
         
         # 启动后台任务
-        thread = threading.Thread(target=real_execution)
+        thread = threading.Thread(target=real_plugin_execution)
         thread.daemon = True
         thread.start()
         
         return {
-            "message": "任务已开始执行，将会真实添加零件数据",
-            "task_id": task.id
+            "message": f"任务已开始执行，将调用插件: {plugin.display_name}",
+            "task_id": task.id,
+            "plugin_name": plugin.name
         }
         
     except Exception as e:

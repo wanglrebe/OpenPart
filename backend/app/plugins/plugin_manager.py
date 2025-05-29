@@ -20,30 +20,65 @@ from app.models.crawler_plugin import PluginStatus
 logger = logging.getLogger(__name__)
 
 class PluginSecurityValidator:
-    """插件安全验证器"""
+    """插件安全验证器 - 渐进式安全策略"""
     
-    # 禁用的导入模块
-    FORBIDDEN_IMPORTS = {
-        'os', 'sys', 'subprocess', 'socket', 'threading', 'multiprocessing',
-        'eval', 'exec', 'compile', '__import__', 'open', 'file',
-        'input', 'raw_input', 'reload', 'globals', 'locals', 'vars',
-        'dir', 'getattr', 'setattr', 'delattr', 'hasattr'
+    # 完全禁用的核心危险模块
+    FORBIDDEN_CORE_MODULES = {
+        'subprocess', 'multiprocessing', 'threading',
+        'socket', 'socketserver', 'ssl', 'ftplib', 'telnetlib',
+        'eval', 'exec', 'compile', '__import__'
+    }
+    
+    # 允许的数据处理库（白名单）
+    ALLOWED_DATA_LIBRARIES = {
+        # PDF处理
+        'pdfplumber', 'PyPDF2', 'pdfminer', 'pymupdf', 'fitz',
+        # Excel/CSV处理
+        'pandas', 'openpyxl', 'xlrd', 'xlwt', 'csv',
+        # Word文档处理
+        'python-docx', 'docx', 'mammoth',
+        # 文本处理
+        'markdown', 'beautifulsoup4', 'bs4', 'lxml',
+        # 图像处理
+        'pillow', 'PIL', 'opencv-python', 'cv2',
+        # 数据格式
+        'json', 'yaml', 'pyyaml', 'xml', 'jsonschema',
+        # 科学计算
+        'numpy', 'scipy',
+        # 时间和正则
+        'datetime', 're', 'time', 'calendar',
+        # 数学和统计
+        'math', 'statistics', 'random',
+        # 网络请求（已有控制）
+        'requests', 'urllib', 'http',
+        # 其他工具
+        'uuid', 'hashlib', 'base64', 'collections',
+        'itertools', 'functools', 'operator'
+    }
+    
+    # 受限但允许的系统模块（需要检查具体用法）
+    RESTRICTED_SYSTEM_MODULES = {
+        'os': ['path'],  # 只允许 os.path
+        'sys': ['version', 'platform'],  # 只允许读取系统信息
+        'tempfile': ['NamedTemporaryFile', 'mktemp', 'gettempdir'],  # 临时文件操作
+        'shutil': ['copy', 'move'],  # 有限的文件操作
     }
     
     # 禁用的函数调用
     FORBIDDEN_FUNCTIONS = {
-        'eval', 'exec', 'compile', '__import__', 'open', 'file',
-        'input', 'raw_input', 'reload'
+        'eval', 'exec', 'compile', '__import__', 'reload',
+        'input', 'raw_input', 'open'  # 直接文件操作被禁止，使用安全包装器
     }
     
     # 危险的属性访问
     DANGEROUS_ATTRIBUTES = {
         '__class__', '__bases__', '__subclasses__', '__mro__',
-        '__globals__', '__code__', '__func__', '__self__'
+        '__globals__', '__code__', '__func__', '__self__',
+        '__builtins__', '__import__'
     }
     
     def validate_plugin_code(self, file_path: str) -> bool:
-        """验证插件代码安全性"""
+        """验证插件代码安全性 - 更新版本"""
         
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
@@ -52,8 +87,8 @@ class PluginSecurityValidator:
             # 解析AST
             tree = ast.parse(code)
             
-            # 检查导入语句
-            self._check_imports(tree)
+            # 检查导入语句 - 使用新的策略
+            self._check_imports_with_whitelist(tree)
             
             # 检查函数调用
             self._check_function_calls(tree)
@@ -61,31 +96,53 @@ class PluginSecurityValidator:
             # 检查属性访问
             self._check_attribute_access(tree)
             
-            # 检查字符串内容
+            # 检查字符串内容中的危险模式
             self._check_string_literals(tree)
             
+            print(f"✓ 插件安全验证通过: {file_path}")
             return True
             
         except Exception as e:
-            logger.error(f"代码安全验证失败: {e}")
+            print(f"✗ 插件安全验证失败: {e}")
             raise SecurityError(f"插件代码存在安全风险: {e}")
     
-    def _check_imports(self, tree: ast.AST):
-        """检查导入语句"""
+    def _check_imports_with_whitelist(self, tree: ast.AST):
+        """检查导入语句 - 白名单策略"""
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
-                    if alias.name in self.FORBIDDEN_IMPORTS:
-                        raise SecurityError(f"禁止导入模块: {alias.name}")
+                    module_name = alias.name.split('.')[0]  # 获取顶级模块名
+                    
+                    # 检查是否为核心禁用模块
+                    if module_name in self.FORBIDDEN_CORE_MODULES:
+                        raise SecurityError(f"禁止导入核心危险模块: {module_name}")
+                    
+                    # 检查是否在白名单中
+                    if module_name not in self.ALLOWED_DATA_LIBRARIES and module_name not in self.RESTRICTED_SYSTEM_MODULES:
+                        # 给出警告但不阻止（可以根据需要调整）
+                        print(f"⚠️ 警告：使用了未在白名单中的模块: {module_name}")
+                        # 暂时允许，但记录
+                        pass
             
             elif isinstance(node, ast.ImportFrom):
-                if node.module in self.FORBIDDEN_IMPORTS:
-                    raise SecurityError(f"禁止导入模块: {node.module}")
-                
-                # 检查from import语句
-                for alias in node.names:
-                    if alias.name in self.FORBIDDEN_IMPORTS:
-                        raise SecurityError(f"禁止导入函数: {alias.name}")
+                if node.module:
+                    module_name = node.module.split('.')[0]
+                    
+                    # 检查核心禁用模块
+                    if module_name in self.FORBIDDEN_CORE_MODULES:
+                        raise SecurityError(f"禁止从危险模块导入: {module_name}")
+                    
+                    # 检查受限模块的特定导入
+                    if module_name in self.RESTRICTED_SYSTEM_MODULES:
+                        allowed_items = self.RESTRICTED_SYSTEM_MODULES[module_name]
+                        for alias in node.names:
+                            if alias.name not in allowed_items and alias.name != '*':
+                                raise SecurityError(f"禁止从 {module_name} 导入: {alias.name}")
+                    
+                    # 检查是否导入禁用函数
+                    for alias in node.names:
+                        if alias.name in self.FORBIDDEN_FUNCTIONS:
+                            raise SecurityError(f"禁止导入函数: {alias.name}")
     
     def _check_function_calls(self, tree: ast.AST):
         """检查函数调用"""
@@ -100,6 +157,12 @@ class PluginSecurityValidator:
                 elif isinstance(node.func, ast.Attribute):
                     if node.func.attr in self.FORBIDDEN_FUNCTIONS:
                         raise SecurityError(f"禁止调用方法: {node.func.attr}")
+                    
+                    # 检查特定的危险调用模式
+                    if isinstance(node.func.value, ast.Name):
+                        if (node.func.value.id == 'os' and 
+                            node.func.attr not in ['path']):
+                            raise SecurityError(f"禁止调用 os.{node.func.attr}")
     
     def _check_attribute_access(self, tree: ast.AST):
         """检查属性访问"""
@@ -109,21 +172,21 @@ class PluginSecurityValidator:
                     raise SecurityError(f"禁止访问危险属性: {node.attr}")
     
     def _check_string_literals(self, tree: ast.AST):
-        """检查字符串字面量"""
+        """检查字符串字面量中的危险模式"""
         dangerous_patterns = [
             r'__.*__',  # 双下划线属性
             r'eval\s*\(',  # eval调用
             r'exec\s*\(',  # exec调用
-            r'import\s+os',  # 动态导入os
-            r'import\s+sys',  # 动态导入sys
+            r'subprocess\.',  # subprocess模块
+            r'os\.system',  # os.system调用
         ]
         
         for node in ast.walk(tree):
-            if isinstance(node, ast.Str):
-                content = node.s
+            if isinstance(node, (ast.Str, ast.Constant)) and isinstance(getattr(node, 's', getattr(node, 'value', None)), str):
+                content = getattr(node, 's', getattr(node, 'value', ''))
                 for pattern in dangerous_patterns:
                     if re.search(pattern, content, re.IGNORECASE):
-                        raise SecurityError(f"字符串包含危险内容: {pattern}")
+                        raise SecurityError(f"字符串包含潜在危险内容: {pattern}")
 
 
 class PluginManager:

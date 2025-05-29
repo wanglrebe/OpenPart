@@ -287,19 +287,20 @@
     />
   </el-dialog>
 
-    <!-- 任务管理对话框 -->
-    <el-dialog
-      :title="`任务管理 - ${currentPlugin?.display_name}`"
-      v-model="showTaskDialog"
-      width="1200px"
-      :close-on-click-modal="false"
-    >
-      <PluginTaskManager
-        v-if="currentPlugin"
-        :plugin="currentPlugin"
-        ref="taskManagerRef"
-      />
-    </el-dialog>
+    <!-- 任务管理对话框 - 确保传递正确的插件信息 -->
+      <el-dialog
+        :title="`任务管理 - ${currentPlugin?.display_name}`"
+        v-model="showTaskDialog"
+        width="1200px"
+        :close-on-click-modal="false"
+      >
+        <PluginTaskManager
+          v-if="currentPlugin && currentPlugin.id"
+          :plugin="currentPlugin"
+          :key="currentPlugin.id"
+          ref="taskManagerRef"
+        />
+      </el-dialog>
   </div>
 </template>
 
@@ -528,6 +529,14 @@ export default {
     const testPluginConnection = async (config) => {
       try {
         console.log('开始测试连接，配置:', config)
+        console.log('当前插件:', currentPlugin.value)
+        
+        if (!currentPlugin.value) {
+          return {
+            success: false,
+            message: '当前插件信息不可用'
+          }
+        }
         
         const response = await axios.post(`/api/admin/crawler-plugins/${currentPlugin.value.id}/test`, {
           config
@@ -537,17 +546,15 @@ export default {
     
         console.log('测试连接响应:', response.data)
         
-        // 确保返回正确的数据结构
+        // 确保返回正确格式的数据
         const result = response.data
-        if (result && typeof result === 'object') {
+        if (result && typeof result === 'object' && 'success' in result) {
           return result
         } else {
-          // 如果后端返回的不是期望的格式，包装一下
           return {
-            success: Boolean(result),
-            message: result ? '连接测试成功' : '连接测试失败',
-            response_time: 0,
-            sample_data: result
+            success: false,
+            message: '测试响应格式异常',
+            raw_response: result
           }
         }
       } catch (error) {
@@ -559,11 +566,33 @@ export default {
       }
     }
 
-    // 管理任务
-    const manageTask = (plugin) => {
-      currentPlugin.value = plugin
-      showTaskDialog.value = true
+    // 还需要添加一个测试当前插件连接的方法（用于任务执行配置）
+    const testCurrentPluginConnection = async (config) => {
+      return testPluginConnection(config)
     }
+
+    // 管理任务
+    const manageTask = async (plugin) => {
+      try {
+        console.log('打开任务管理，插件ID:', plugin.id)
+        
+        // 重新获取最新的插件信息，确保配置和schema是最新的
+        const response = await axios.get(`/api/admin/crawler-plugins/${plugin.id}`, {
+          headers: { Authorization: `Bearer ${auth.getToken()}` }
+        })
+        
+        console.log('获取到的最新插件信息:', response.data)
+        
+        // 使用最新的插件信息
+        currentPlugin.value = response.data
+        showTaskDialog.value = true
+        
+      } catch (error) {
+        console.error('获取插件信息失败:', error)
+        ElMessage.error('获取插件信息失败: ' + (error.response?.data?.detail || error.message))
+      }
+    }
+
 
     // 处理插件操作
     const handlePluginAction = async (command, plugin) => {
@@ -694,6 +723,7 @@ export default {
       configPlugin,
       savePluginConfig,
       testPluginConnection,
+      testCurrentPluginConnection,
       
       // 任务相关
       showTaskDialog,

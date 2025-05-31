@@ -10,10 +10,27 @@
         :default-active="currentRoute"
         router
       >
-        <el-menu-item index="/dashboard">仪表板</el-menu-item>
-        <el-menu-item index="/parts">零件管理</el-menu-item>
-        <el-menu-item index="/import-export">数据管理</el-menu-item>
-        <el-menu-item index="/crawler-plugins">插件管理</el-menu-item>
+        <el-menu-item index="/dashboard">
+          <el-icon><Odometer /></el-icon>
+          仪表板
+        </el-menu-item>
+        <el-menu-item index="/parts">
+          <el-icon><Box /></el-icon>
+          零件管理
+        </el-menu-item>
+        <!-- 🆕 新增兼容性管理菜单项 -->
+        <el-menu-item index="/compatibility">
+          <el-icon><Connection /></el-icon>
+          兼容性配置
+        </el-menu-item>
+        <el-menu-item index="/import-export">
+          <el-icon><Download /></el-icon>
+          数据管理
+        </el-menu-item>
+        <el-menu-item index="/crawler-plugins">
+          <el-icon><Tools /></el-icon>
+          插件管理
+        </el-menu-item>
       </el-menu>
     </div>
     
@@ -38,7 +55,9 @@
 <script>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { User, ArrowDown } from '@element-plus/icons-vue'
+import { 
+  User, ArrowDown, Odometer, Box, Connection, Download, Tools 
+} from '@element-plus/icons-vue'
 import { auth } from '../utils/auth'
 import { authAPI } from '../utils/api'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -47,7 +66,12 @@ export default {
   name: 'NavBar',
   components: {
     User,
-    ArrowDown
+    ArrowDown,
+    Odometer,
+    Box,
+    Connection,  // 🆕 新增兼容性图标
+    Download,
+    Tools
   },
   setup() {
     const router = useRouter()
@@ -63,6 +87,8 @@ export default {
         return '/dashboard'
       } else if (path === '/parts') {
         return '/parts'
+      } else if (path === '/compatibility') {  // 🆕 新增路由匹配
+        return '/compatibility'
       } else if (path === '/import-export') {
         return '/import-export'
       } else if (path === '/crawler-plugins') {
@@ -161,5 +187,46 @@ export default {
 
 .el-menu--horizontal {
   border-bottom: none;
+}
+
+/* 🆕 兼容性菜单项的特殊样式 */
+.el-menu-item[index="/compatibility"] {
+  position: relative;
+}
+
+.el-menu-item[index="/compatibility"]:after {
+  content: 'NEW';
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: #67C23A;
+  color: white;
+  font-size: 10px;
+  padding: 1px 4px;
+  border-radius: 2px;
+  font-weight: bold;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .navbar {
+    padding: 0 10px;
+  }
+  
+  .navbar-left h2 {
+    font-size: 16px;
+  }
+  
+  .navbar-center .el-menu {
+    font-size: 14px;
+  }
+  
+  .el-menu-item span {
+    display: none;
+  }
+  
+  .el-menu-item .el-icon {
+    margin-right: 0;
+  }
 }
 </style>

@@ -12,9 +12,8 @@
       >
         <el-menu-item index="Dashboard">仪表板</el-menu-item>
         <el-menu-item index="/parts">零件管理</el-menu-item>
-        <el-menu-item index="/compatibility">兼容性管理</el-menu-item>  <!-- 新增兼容性管理菜单 -->
         <el-menu-item index="/import-export">数据管理</el-menu-item>
-        <el-menu-item index="/crawler-plugins">插件管理</el-menu-item>
+        <el-menu-item index="/crawler-plugins">插件管理</el-menu-item>  <!-- 新增插件管理菜单 -->
       </el-menu>
     </div>
     

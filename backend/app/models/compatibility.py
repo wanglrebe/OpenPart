@@ -32,10 +32,12 @@ class SourceType(enum.Enum):
     USER_CONTRIBUTION = "user_contribution"  # 用户贡献（未来扩展）
 
 class AuditAction(enum.Enum):
-    """审计动作枚举"""
+    """审计动作枚举 - 更新版本"""
     CREATE = "create"                   # 创建
     UPDATE = "update"                   # 更新
-    DELETE = "delete"                   # 删除
+    DELETE = "delete"                   # 删除（真正的删除）
+    DISABLE = "disable"                 # 停用（新增）
+    ENABLE = "enable"                   # 启用（新增）
     TEST = "test"                       # 测试
     VALIDATE = "validate"               # 验证
 
@@ -159,7 +161,7 @@ class CompatibilityTemplate(Base):
         return f"<CompatibilityTemplate(id={self.id}, name='{self.name}', public={self.is_public})>"
 
 class RuleAuditLog(Base):
-    """规则审计日志模型"""
+    """规则审计日志模型 - 更新版本"""
     __tablename__ = "rule_audit_log"
     
     id = Column(Integer, primary_key=True, index=True)
@@ -179,16 +181,14 @@ class RuleAuditLog(Base):
     operator = relationship("User", foreign_keys=[changed_by])
     
     __table_args__ = (
-        CheckConstraint("action IN ('create', 'update', 'delete', 'test', 'validate')", 
+        # 更新约束以包含新的操作类型
+        CheckConstraint("action IN ('create', 'update', 'delete', 'disable', 'enable', 'test', 'validate')", 
                        name='check_audit_action'),
         CheckConstraint("risk_level IN ('low', 'medium', 'high')", 
                        name='check_risk_level'),
         Index('ix_rule_audit_log_time_risk', 'changed_at', 'risk_level'),
         Index('ix_rule_audit_log_user_action', 'changed_by', 'action'),
     )
-    
-    def __repr__(self):
-        return f"<RuleAuditLog(id={self.id}, rule_id={self.rule_id}, action='{self.action}', risk='{self.risk_level}')>"
 
 class ExpressionSecurityCache(Base):
     """表达式安全扫描缓存模型"""

@@ -18,8 +18,8 @@
             <el-form :model="exportForm" label-width="120px">
               <el-form-item label="导出格式">
                 <el-radio-group v-model="exportForm.format">
-                  <el-radio label="json">JSON 格式</el-radio>
-                  <el-radio label="csv">CSV 格式</el-radio>
+                  <el-radio value="json">JSON 格式</el-radio>
+                  <el-radio value="csv">CSV 格式</el-radio>
                 </el-radio-group>
               </el-form-item>
               
@@ -93,16 +93,16 @@
             <el-form :model="importForm" label-width="120px">
               <el-form-item label="冲突处理">
                 <el-radio-group v-model="importForm.conflict_strategy">
-                  <el-radio label="skip">跳过重复</el-radio>
-                  <el-radio label="update">更新现有</el-radio>
-                  <el-radio label="rename">重命名导入</el-radio>
+                  <el-radio value="skip">跳过重复</el-radio>
+                  <el-radio value="update">更新现有</el-radio>
+                  <el-radio value="rename">重命名导入</el-radio>
                 </el-radio-group>
               </el-form-item>
               
               <el-form-item label="重复检查">
                 <el-checkbox-group v-model="importForm.duplicate_check_fields">
-                  <el-checkbox label="name">名称</el-checkbox>
-                  <el-checkbox label="category">类别</el-checkbox>
+                  <el-checkbox value="name">名称</el-checkbox>
+                  <el-checkbox value="category">类别</el-checkbox>
                 </el-checkbox-group>
               </el-form-item>
               

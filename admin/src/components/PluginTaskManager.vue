@@ -196,9 +196,9 @@
         
         <el-form-item label="调度类型" prop="schedule_type">
           <el-radio-group v-model="taskForm.schedule_type">
-            <el-radio label="manual">手动执行</el-radio>
-            <el-radio label="cron">定时执行</el-radio>
-            <el-radio label="interval">间隔执行</el-radio>
+            <el-radio value="manual">手动执行</el-radio>
+            <el-radio value="cron">定时执行</el-radio>
+            <el-radio value="interval">间隔执行</el-radio>
           </el-radio-group>
         </el-form-item>
         

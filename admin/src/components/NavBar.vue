@@ -7,13 +7,13 @@
     <div class="navbar-center">
       <el-menu 
         mode="horizontal" 
-        :default-active="$route.name"
+        :default-active="currentRoute"
         router
       >
-        <el-menu-item index="Dashboard">仪表板</el-menu-item>
+        <el-menu-item index="/dashboard">仪表板</el-menu-item>
         <el-menu-item index="/parts">零件管理</el-menu-item>
         <el-menu-item index="/import-export">数据管理</el-menu-item>
-        <el-menu-item index="/crawler-plugins">插件管理</el-menu-item>  <!-- 新增插件管理菜单 -->
+        <el-menu-item index="/crawler-plugins">插件管理</el-menu-item>
       </el-menu>
     </div>
     
@@ -36,8 +36,8 @@
 </template>
 
 <script>
-import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { User, ArrowDown } from '@element-plus/icons-vue'
 import { auth } from '../utils/auth'
 import { authAPI } from '../utils/api'
@@ -51,7 +51,27 @@ export default {
   },
   setup() {
     const router = useRouter()
+    const route = useRoute()
     const currentUser = ref(null)
+
+    // 计算当前路由，确保与菜单项的 index 匹配
+    const currentRoute = computed(() => {
+      const path = route.path
+      
+      // 根据路径返回对应的菜单项 index
+      if (path === '/' || path === '/dashboard') {
+        return '/dashboard'
+      } else if (path === '/parts') {
+        return '/parts'
+      } else if (path === '/import-export') {
+        return '/import-export'
+      } else if (path === '/crawler-plugins') {
+        return '/crawler-plugins'
+      }
+      
+      // 默认返回当前路径
+      return path
+    })
 
     onMounted(async () => {
       // 获取用户信息
@@ -94,6 +114,7 @@ export default {
 
     return {
       currentUser,
+      currentRoute,
       handleCommand
     }
   }

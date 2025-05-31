@@ -121,7 +121,10 @@
 
 <script>
 import { ref, reactive, onMounted } from 'vue'
-import { Box, Collection, User, CircleCheck, Plus, Search, UserFilled } from '@element-plus/icons-vue'
+import { 
+  Box, Collection, User, CircleCheck, Plus, Search, UserFilled,
+  Download, Upload, Tools  // 添加这行
+} from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import NavBar from '../components/NavBar.vue'
 import { partsAPI, authAPI } from '../utils/api'
@@ -130,14 +133,9 @@ import { auth } from '../utils/auth'
 export default {
   name: 'Dashboard',
   components: {
-    NavBar,
-    Box,
-    Collection,
-    User,
-    CircleCheck,
-    Plus,
-    Search,
-    UserFilled
+  NavBar,
+  Box, Collection, User, CircleCheck, Plus, Search, UserFilled,
+  Download, Upload, Tools  // 添加这行
   },
   setup() {
     const currentUser = ref(auth.getUser())

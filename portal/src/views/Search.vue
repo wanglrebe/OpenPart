@@ -212,6 +212,7 @@
               :part="part"
               @favorite="onFavorite"
               @compare="onCompare"
+              @compatibility="onCompatibility"
               @message="showMessage"
             />
           </div>
@@ -992,6 +993,17 @@ export default {
       console.log('添加到对比:', part.name)
     }
     
+    // 兼容性检查 - 新增
+    const onCompatibility = (part, added) => {
+      console.log('兼容性检查操作:', part.name, added ? '已添加' : '已移除')
+      
+      // 可以在这里添加额外的逻辑，比如自动刷新兼容性相关的UI状态
+      if (added && compatibilityCheckCount.value >= 2) {
+        // 如果兼容性检查列表达到2个或更多零件，可以提示用户
+        console.log('兼容性检查列表已有足够零件，可以开始检查')
+      }
+    }
+    
     // 消息提示
     const showMessage = (msg) => {
       message.value = {
@@ -1066,6 +1078,7 @@ export default {
       loadMore,
       onFavorite,
       onCompare,
+      onCompatibility,
       showMessage,
       hideMessage
     }

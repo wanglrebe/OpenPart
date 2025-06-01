@@ -1,4 +1,4 @@
-<!-- portal/src/components/PartCard.vue (更新版本 - 添加对比功能) -->
+<!-- portal/src/components/PartCard.vue (增强版本 - 添加兼容性检查功能) -->
 <template>
   <div class="part-card" @click="goToDetail">
     <!-- 零件图片 -->
@@ -84,6 +84,19 @@
         </svg>
         <span v-if="comparisonCount > 0" class="comparison-badge">{{ comparisonCount }}</span>
       </button>
+      
+      <!-- 兼容性检查按钮 - 新增 -->
+      <button 
+        class="action-btn compatibility-action"
+        :class="{ active: isInCompatibilityCheck }"
+        @click.stop="toggleCompatibilityCheck" 
+        :title="isInCompatibilityCheck ? '从兼容性检查中移除' : '加入兼容性检查'"
+      >
+        <svg class="action-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <span v-if="compatibilityCheckCount > 0" class="compatibility-badge">{{ compatibilityCheckCount }}</span>
+      </button>
     </div>
   </div>
 </template>
@@ -92,6 +105,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { favoritesManager, comparisonManager } from '../utils/api'
+import { compatibilityCheckManager } from '../utils/compatibilityManager'
 
 export default {
   name: 'PartCard',
@@ -101,14 +115,16 @@ export default {
       required: true
     }
   },
-  emits: ['favorite', 'compare', 'message'],
+  emits: ['favorite', 'compare', 'compatibility', 'message'],
   setup(props, { emit }) {
     const router = useRouter()
     const showAllProperties = ref(false)
     const imageError = ref(false)
     const isFavorited = ref(false)
     const isInComparison = ref(false)
+    const isInCompatibilityCheck = ref(false) // 新增
     const comparisonCount = ref(0)
+    const compatibilityCheckCount = ref(0) // 新增
     
     // 显示的属性（限制显示数量）
     const displayProperties = computed(() => {
@@ -129,7 +145,9 @@ export default {
     const updateStatus = () => {
       isFavorited.value = favoritesManager.isFavorited(props.part.id)
       isInComparison.value = comparisonManager.isInComparison(props.part.id)
+      isInCompatibilityCheck.value = compatibilityCheckManager.isInCheck(props.part.id) // 新增
       comparisonCount.value = comparisonManager.getComparisonCount()
+      compatibilityCheckCount.value = compatibilityCheckManager.getCheckCount() // 新增
     }
     
     const goToDetail = () => {
@@ -212,6 +230,54 @@ export default {
       }
     }
     
+    // 新增：兼容性检查切换功能
+    const toggleCompatibilityCheck = () => {
+      let result
+      
+      if (isInCompatibilityCheck.value) {
+        result = compatibilityCheckManager.removeFromCheck(props.part.id)
+      } else {
+        result = compatibilityCheckManager.addToCheck(props.part)
+      }
+      
+      if (result.success) {
+        updateStatus()
+        emit('compatibility', props.part, !isInCompatibilityCheck.value)
+        
+        // 显示操作结果消息
+        if (result.message && result.message.trim()) {
+          emit('message', { 
+            type: 'success', 
+            text: result.message
+          })
+        }
+        
+        // 如果兼容性检查列表有足够的零件，可以提示用户去检查
+        if (!isInCompatibilityCheck.value && result.count >= 2) {
+          setTimeout(() => {
+            emit('message', { 
+              type: 'info', 
+              text: `兼容性检查列表已有${result.count}个零件，可以开始检查了！`,
+              action: {
+                text: '立即检查',
+                callback: () => {
+                  const checkUrl = compatibilityCheckManager.getCheckUrl()
+                  if (checkUrl) {
+                    router.push(checkUrl)
+                  }
+                }
+              }
+            })
+          }, 1000)
+        }
+      } else if (result.message && result.message.trim()) {
+        emit('message', { 
+          type: 'error', 
+          text: result.message 
+        })
+      }
+    }
+    
     const formatTime = (timeString) => {
       if (!timeString) return ''
       
@@ -231,7 +297,11 @@ export default {
     
     // 监听存储变化，更新状态
     const handleStorageChange = (e) => {
-      if (e.key === 'openpart_favorites' || e.key === 'openpart_comparison') {
+      if ([
+        'openpart_favorites', 
+        'openpart_comparison',
+        'openpart_compatibility_check' // 新增
+      ].includes(e.key)) {
         updateStatus()
       }
     }
@@ -252,11 +322,14 @@ export default {
       hiddenPropertiesCount,
       isFavorited,
       isInComparison,
+      isInCompatibilityCheck, // 新增
       comparisonCount,
+      compatibilityCheckCount, // 新增
       goToDetail,
       onImageError,
       toggleFavorite,
       toggleComparison,
+      toggleCompatibilityCheck, // 新增
       formatTime
     }
   }
@@ -478,6 +551,28 @@ export default {
   background: color-mix(in srgb, var(--primary) 90%, black);
 }
 
+/* 兼容性检查按钮特定样式 */
+.action-btn.compatibility-action {
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid color-mix(in srgb, #10b981 30%, transparent);
+}
+
+.action-btn.compatibility-action:hover {
+  background: #10b981;
+  color: white;
+  border-color: #10b981;
+}
+
+.action-btn.compatibility-action.active {
+  background: #10b981;
+  color: white;
+  border-color: #10b981;
+}
+
+.action-btn.compatibility-action.active:hover {
+  background: color-mix(in srgb, #10b981 90%, black);
+}
+
 .action-icon {
   width: 16px;
   height: 16px;
@@ -490,6 +585,24 @@ export default {
   width: 18px;
   height: 18px;
   background: #f43f5e;
+  color: white;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--bg-card);
+}
+
+/* 兼容性检查徽章样式 */
+.compatibility-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  background: #10b981;
   color: white;
   border-radius: 50%;
   font-size: 10px;
@@ -525,6 +638,16 @@ export default {
   .part-actions {
     opacity: 1;
     transform: translateY(0);
+  }
+  
+  .action-btn {
+    width: 28px;
+    height: 28px;
+  }
+  
+  .action-icon {
+    width: 14px;
+    height: 14px;
   }
 }
 

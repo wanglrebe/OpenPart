@@ -1,4 +1,4 @@
-<!-- portal/src/components/GlobalNavigation.vue (新组件) -->
+<!-- portal/src/components/GlobalNavigation.vue (更新版本 - 添加兼容性检查导航) -->
 <template>
   <header class="global-nav">
     <div class="container">
@@ -53,11 +53,38 @@
             <span class="nav-badge comparison">{{ comparisonCount }}</span>
           </button>
           
+          <!-- 兼容性检查按钮（有2+零件时显示） - 新增 -->
+          <button 
+            v-if="compatibilityCount >= 2"
+            @click="goToCompatibilityCheck"
+            class="nav-link compatibility-btn"
+            title="兼容性检查"
+          >
+            <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>兼容性检查</span>
+            <span class="nav-badge compatibility">{{ compatibilityCount }}</span>
+          </button>
+          
           <ThemeToggle />
         </nav>
         
         <!-- 移动端菜单按钮 -->
         <div class="mobile-nav">
+          <!-- 兼容性检查快捷按钮（移动端） - 新增 -->
+          <button 
+            v-if="compatibilityCount >= 2"
+            @click="goToCompatibilityCheck"
+            class="mobile-compatibility-btn"
+            title="兼容性检查"
+          >
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span class="mobile-badge compatibility">{{ compatibilityCount }}</span>
+          </button>
+          
           <button 
             v-if="comparisonCount > 0"
             @click="goToComparison"
@@ -122,6 +149,39 @@
             <span v-if="projectsCount > 0" class="mobile-nav-badge">{{ projectsCount }}</span>
           </router-link>
           
+          <!-- 兼容性检查菜单项 - 新增 -->
+          <div 
+            v-if="compatibilityCount >= 2" 
+            class="mobile-nav-item compatibility-item" 
+            @click="goToCompatibilityCheck"
+          >
+            <svg class="mobile-nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div class="mobile-nav-info">
+              <span class="mobile-nav-title">兼容性检查</span>
+              <span class="mobile-nav-desc">{{ compatibilityCount }} 个零件待检查</span>
+            </div>
+            <span class="mobile-nav-badge compatibility">{{ compatibilityCount }}</span>
+          </div>
+          
+          <!-- 兼容性检查入口（当零件不足时的引导） - 新增 -->
+          <router-link 
+            v-else 
+            to="/compatibility" 
+            class="mobile-nav-item compatibility-guide" 
+            @click="closeMobileMenu"
+          >
+            <svg class="mobile-nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div class="mobile-nav-info">
+              <span class="mobile-nav-title">兼容性检查</span>
+              <span class="mobile-nav-desc">检查零件之间的兼容性</span>
+            </div>
+            <span class="mobile-nav-badge info">新功能</span>
+          </router-link>
+          
           <div v-if="comparisonCount > 0" class="mobile-nav-item comparison-item" @click="goToComparison">
             <svg class="mobile-nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
@@ -150,6 +210,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ThemeToggle from './ThemeToggle.vue'
 import { favoritesManager, comparisonManager } from '../utils/api'
+import { compatibilityCheckManager } from '../utils/compatibilityManager'
 
 export default {
   name: 'GlobalNavigation',
@@ -163,11 +224,13 @@ export default {
     const favoritesCount = ref(0)
     const projectsCount = ref(0)
     const comparisonCount = ref(0)
+    const compatibilityCount = ref(0) // 新增
     
     // 更新计数
     const updateCounts = () => {
       favoritesCount.value = favoritesManager.getFavoritesCount()
       comparisonCount.value = comparisonManager.getComparisonCount()
+      compatibilityCount.value = compatibilityCheckManager.getCheckCount() // 新增
       
       // 获取项目数量
       const projects = JSON.parse(localStorage.getItem('openpart_projects') || '[]')
@@ -192,9 +255,27 @@ export default {
       }
     }
     
+    // 跳转兼容性检查页面 - 新增
+    const goToCompatibilityCheck = () => {
+      const checkUrl = compatibilityCheckManager.getCheckUrl()
+      if (checkUrl) {
+        router.push(checkUrl)
+        closeMobileMenu()
+      } else {
+        // 如果没有足够的零件，直接跳转到兼容性检查页面
+        router.push('/compatibility')
+        closeMobileMenu()
+      }
+    }
+    
     // 监听存储变化
     const handleStorageChange = (e) => {
-      if (['openpart_favorites', 'openpart_comparison', 'openpart_projects'].includes(e.key)) {
+      if ([
+        'openpart_favorites', 
+        'openpart_comparison', 
+        'openpart_projects',
+        'openpart_compatibility_check' // 新增
+      ].includes(e.key)) {
         updateCounts()
       }
     }
@@ -219,15 +300,18 @@ export default {
       favoritesCount,
       projectsCount,
       comparisonCount,
+      compatibilityCount, // 新增
       toggleMobileMenu,
       closeMobileMenu,
-      goToComparison
+      goToComparison,
+      goToCompatibilityCheck // 新增
     }
   }
 }
 </script>
 
 <style scoped>
+/* 保持现有样式不变，添加兼容性检查相关样式 */
 .global-nav {
   background: var(--bg-card);
   border-bottom: 1px solid var(--border-color);
@@ -275,7 +359,6 @@ export default {
   align-items: center;
 }
 
-/* 确保搜索框不影响导航高度 */
 .nav-search-slot :deep(.search-box) {
   margin: 0;
   width: 100%;
@@ -343,6 +426,22 @@ export default {
   background: #f59e0b;
 }
 
+/* 兼容性检查按钮样式 - 新增 */
+.nav-badge.compatibility {
+  background: #10b981;
+}
+
+.compatibility-btn {
+  background: color-mix(in srgb, #10b981 10%, transparent);
+  border-color: color-mix(in srgb, #10b981 20%, transparent);
+  color: #10b981;
+}
+
+.compatibility-btn:hover {
+  background: #10b981;
+  color: white;
+}
+
 .comparison-btn {
   background: color-mix(in srgb, #f59e0b 10%, transparent);
   border-color: color-mix(in srgb, #f59e0b 20%, transparent);
@@ -362,7 +461,8 @@ export default {
 }
 
 .mobile-menu-btn,
-.mobile-comparison-btn {
+.mobile-comparison-btn,
+.mobile-compatibility-btn { /* 新增 mobile-compatibility-btn */
   width: 40px;
   height: 40px;
   border: 1px solid var(--border-color);
@@ -378,7 +478,8 @@ export default {
 }
 
 .mobile-menu-btn:hover,
-.mobile-comparison-btn:hover {
+.mobile-comparison-btn:hover,
+.mobile-compatibility-btn:hover { /* 新增 */
   background: var(--bg-secondary);
   border-color: var(--primary);
 }
@@ -393,6 +494,13 @@ export default {
   background: color-mix(in srgb, #f59e0b 10%, transparent);
   border-color: color-mix(in srgb, #f59e0b 20%, transparent);
   color: #f59e0b;
+}
+
+/* 移动端兼容性检查按钮样式 - 新增 */
+.mobile-compatibility-btn {
+  background: color-mix(in srgb, #10b981 10%, transparent);
+  border-color: color-mix(in srgb, #10b981 20%, transparent);
+  color: #10b981;
 }
 
 .mobile-badge {
@@ -410,8 +518,14 @@ export default {
   line-height: 1.2;
 }
 
+/* 移动端兼容性检查徽章样式 - 新增 */
+.mobile-badge.compatibility {
+  background: #10b981;
+}
+
 .mobile-menu-btn svg,
-.mobile-comparison-btn svg {
+.mobile-comparison-btn svg,
+.mobile-compatibility-btn svg { /* 新增 */
   width: 20px;
   height: 20px;
 }
@@ -481,6 +595,15 @@ export default {
   background: color-mix(in srgb, #f59e0b 5%, transparent);
 }
 
+/* 移动端兼容性检查菜单项样式 - 新增 */
+.mobile-nav-item.compatibility-item {
+  background: color-mix(in srgb, #10b981 5%, transparent);
+}
+
+.mobile-nav-item.compatibility-guide:hover {
+  background: color-mix(in srgb, #10b981 10%, transparent);
+}
+
 .mobile-nav-icon {
   width: 24px;
   height: 24px;
@@ -522,6 +645,15 @@ export default {
   background: #f59e0b;
 }
 
+/* 移动端兼容性检查徽章样式 - 新增 */
+.mobile-nav-badge.compatibility {
+  background: #10b981;
+}
+
+.mobile-nav-badge.info {
+  background: var(--secondary);
+}
+
 .mobile-menu-footer {
   padding: 20px;
   border-top: 1px solid var(--border-color);
@@ -556,7 +688,6 @@ export default {
     display: flex;
   }
   
-  /* 移动端搜索框插槽显示处理 */
   .nav-search-slot {
     display: flex;
     min-width: 200px;
@@ -564,7 +695,6 @@ export default {
     margin: 0 12px;
   }
   
-  /* 如果插槽为空则隐藏 */
   .nav-search-slot:empty {
     display: none;
   }

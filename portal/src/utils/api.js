@@ -478,4 +478,526 @@ class Cache {
 
 export const searchCache = new Cache()
 
+// 兼容性API工具集扩展 - 添加到现有的 src/utils/api.js 文件末尾
+
+// ==================== 兼容性API集合 ====================
+
+/**
+ * 兼容性检查API
+ * 基于后端 /api/public/compatibility/ 端点
+ */
+export const compatibilityAPI = {
+  /**
+   * 兼容性检查 (2-10个零件)
+   */
+  check(data) {
+    return axios.post('/api/public/compatibility/check', {  // 直接使用axios，不用api实例
+      part_ids: data.part_ids,
+      include_cache: data.include_cache !== false,
+      detail_level: data.detail_level || 'standard'
+    })
+  },
+
+  /**
+   * 兼容性搜索
+   */
+  search(data) {
+    return axios.post('/api/public/compatibility/search', {
+      selected_parts: data.selected_parts,
+      target_categories: data.target_categories || null,
+      min_compatibility_score: data.min_compatibility_score || 50,
+      limit: data.limit || 20,
+      include_theoretical: data.include_theoretical !== false
+    })
+  },
+
+  /**
+   * 快速兼容性检查 (两个零件)
+   */
+  quickCheck(partAId, partBId) {
+    return axios.get('/api/public/compatibility/quick-check', {
+      params: { 
+        part_a_id: partAId, 
+        part_b_id: partBId 
+      }
+    })
+  },
+
+  /**
+   * 获取兼容性建议
+   */
+  suggestions(partId, params = {}) {
+    return axios.get(`/api/public/compatibility/suggestions/${partId}`, { 
+      params: {
+        limit: params.limit || 10,
+        min_score: params.min_score || 70,
+        categories: params.categories || null
+      }
+    })
+  },
+
+  /**
+   * 获取系统状态
+   */
+  systemStatus() {
+    return axios.get('/api/public/compatibility/system-status')
+  },
+
+  /**
+   * 获取兼容性知识库
+   */
+  knowledgeBase(params = {}) {
+    return axios.get('/api/public/compatibility/knowledge-base', { params })
+  },
+
+  /**
+   * 获取外部反馈渠道信息
+   */
+  feedbackChannels() {
+    return axios.get('/api/public/compatibility/feedback-channels')
+  },
+
+  /**
+   * 获取API使用示例
+   */
+  examples() {
+    return axios.get('/api/public/compatibility/examples')
+  },
+
+  /**
+   * 获取版本信息
+   */
+  version() {
+    return axios.get('/api/public/compatibility/version')
+  }
+}
+
+// ==================== 兼容性辅助函数 ====================
+
+/**
+ * 兼容性相关的辅助函数
+ */
+export const compatibilityHelpers = {
+  /**
+   * 格式化兼容度等级
+   * @param {string} grade - 兼容度等级
+   * @returns {Object} 格式化后的等级信息
+   */
+  formatGrade(grade) {
+    const grades = {
+      official_support: { 
+        text: '官方支持', 
+        color: '#67C23A', 
+        icon: '✅',
+        description: '官方确认兼容，完全支持',
+        scoreRange: '90-100分'
+      },
+      unofficial_support: { 
+        text: '社区验证', 
+        color: '#409EFF', 
+        icon: '🔷',
+        description: '用户验证可用，可能有限制',
+        scoreRange: '70-89分'
+      },
+      theoretical: { 
+        text: '理论兼容', 
+        color: '#E6A23C', 
+        icon: '⚠️',
+        description: '理论上兼容，建议实际测试',
+        scoreRange: '50-69分'
+      },
+      incompatible: { 
+        text: '不兼容', 
+        color: '#F56C6C', 
+        icon: '❌',
+        description: '不兼容或存在已知问题',
+        scoreRange: '0-49分'
+      }
+    }
+    return grades[grade] || grades.incompatible
+  },
+
+  /**
+   * 格式化兼容性评分
+   * @param {number} score - 评分 (0-100)
+   * @returns {Object} 格式化后的评分信息
+   */
+  formatScore(score) {
+    const normalizedScore = Math.max(0, Math.min(100, score))
+    
+    return {
+      value: normalizedScore,
+      percentage: normalizedScore,
+      color: normalizedScore >= 90 ? '#67C23A' : 
+             normalizedScore >= 70 ? '#409EFF' : 
+             normalizedScore >= 50 ? '#E6A23C' : '#F56C6C',
+      grade: normalizedScore >= 90 ? 'official_support' :
+             normalizedScore >= 70 ? 'unofficial_support' :
+             normalizedScore >= 50 ? 'theoretical' : 'incompatible',
+      status: normalizedScore >= 50 ? 'compatible' : 'incompatible'
+    }
+  },
+
+  /**
+   * 获取兼容度等级对应的颜色
+   * @param {string} grade - 兼容度等级
+   * @returns {string} 颜色值
+   */
+  getGradeColor(grade) {
+    const gradeInfo = this.formatGrade(grade)
+    return gradeInfo.color
+  },
+
+  /**
+   * 获取兼容度等级对应的图标
+   * @param {string} grade - 兼容度等级
+   * @returns {string} 图标
+   */
+  getGradeIcon(grade) {
+    const gradeInfo = this.formatGrade(grade)
+    return gradeInfo.icon
+  },
+
+  /**
+   * 批量检查兼容性
+   * @param {Array} partIdGroups - 零件ID组合数组
+   * @param {Object} options - 选项
+   * @returns {Promise<Array>} 检查结果数组
+   */
+  async batchCheck(partIdGroups, options = {}) {
+    const results = []
+    
+    for (const group of partIdGroups) {
+      try {
+        const result = await compatibilityAPI.check({
+          part_ids: group,
+          include_cache: options.include_cache !== false,
+          detail_level: options.detail_level || 'standard'
+        })
+        results.push({
+          success: true,
+          parts: group,
+          data: result.data
+        })
+      } catch (error) {
+        results.push({
+          success: false,
+          parts: group,
+          error: error.message || '检查失败'
+        })
+      }
+    }
+    
+    return results
+  },
+
+  /**
+   * 分析兼容性检查结果
+   * @param {Object} result - 兼容性检查结果
+   * @returns {Object} 分析总结
+   */
+  analyzeResult(result) {
+    if (!result || !result.part_combinations) {
+      return {
+        summary: '无有效结果',
+        issues: ['检查结果为空'],
+        recommendations: ['请重新进行兼容性检查']
+      }
+    }
+
+    const combinations = result.part_combinations
+    const incompatiblePairs = combinations.filter(c => !c.is_compatible)
+    const lowScorePairs = combinations.filter(c => c.is_compatible && c.compatibility_score < 70)
+    
+    const issues = []
+    const recommendations = []
+
+    // 分析不兼容问题
+    if (incompatiblePairs.length > 0) {
+      issues.push(`发现${incompatiblePairs.length}个不兼容组合`)
+      recommendations.push('建议更换不兼容的零件')
+    }
+
+    // 分析低评分问题
+    if (lowScorePairs.length > 0) {
+      issues.push(`${lowScorePairs.length}个组合兼容性较低`)
+      recommendations.push('考虑优化配置以获得更好兼容性')
+    }
+
+    // 分析警告信息
+    const allWarnings = combinations.flatMap(c => c.warnings || [])
+    if (allWarnings.length > 0) {
+      issues.push(`存在${allWarnings.length}个警告信息`)
+      recommendations.push('请注意查看详细警告说明')
+    }
+
+    const summary = result.is_overall_compatible ? 
+      `整体兼容，评分${result.overall_score}分` :
+      `存在兼容性问题，评分${result.overall_score}分`
+
+    return {
+      summary,
+      issues,
+      recommendations,
+      stats: {
+        totalPairs: combinations.length,
+        compatiblePairs: combinations.filter(c => c.is_compatible).length,
+        incompatiblePairs: incompatiblePairs.length,
+        lowScorePairs: lowScorePairs.length,
+        overallScore: result.overall_score,
+        overallGrade: result.overall_compatibility_grade
+      }
+    }
+  },
+
+  /**
+   * 格式化执行时间
+   * @param {number} timeInSeconds - 执行时间（秒）
+   * @returns {string} 格式化的时间字符串
+   */
+  formatExecutionTime(timeInSeconds) {
+    if (timeInSeconds < 1) {
+      return `${Math.round(timeInSeconds * 1000)}ms`
+    } else {
+      return `${timeInSeconds.toFixed(2)}s`
+    }
+  },
+
+  /**
+   * 创建兼容性报告
+   * @param {Object} result - 兼容性检查结果
+   * @param {Array} partsList - 零件列表
+   * @returns {Object} 格式化的报告
+   */
+  createReport(result, partsList) {
+    const analysis = this.analyzeResult(result)
+    const timestamp = new Date().toLocaleString('zh-CN')
+    
+    return {
+      meta: {
+        title: '零件兼容性检查报告',
+        generateTime: timestamp,
+        partCount: partsList.length,
+        executionTime: this.formatExecutionTime(result.execution_time || 0)
+      },
+      parts: partsList.map(part => ({
+        id: part.id,
+        name: part.name,
+        category: part.category
+      })),
+      summary: {
+        overallScore: result.overall_score,
+        overallGrade: this.formatGrade(result.overall_compatibility_grade),
+        isCompatible: result.is_overall_compatible,
+        analysis: analysis.summary
+      },
+      details: result.part_combinations?.map(combo => ({
+        partA: combo.part_a_name,
+        partB: combo.part_b_name,
+        score: combo.compatibility_score,
+        grade: this.formatGrade(combo.compatibility_grade),
+        compatible: combo.is_compatible,
+        warnings: combo.warnings || []
+      })) || [],
+      issues: analysis.issues,
+      recommendations: [...analysis.recommendations, ...(result.recommendations || [])],
+      cached: result.cached || false
+    }
+  }
+}
+
+// ==================== 统一错误处理 ====================
+
+/**
+ * 兼容性API统一错误处理
+ * @param {Error} error - 错误对象
+ * @returns {string} 用户友好的错误信息
+ */
+export const handleCompatibilityError = (error) => {
+  console.error('兼容性API错误:', error)
+  
+  if (error.response) {
+    const status = error.response.status
+    const detail = error.response.data?.detail || ''
+    
+    switch (status) {
+      case 400:
+        if (detail.includes('零件')) {
+          return detail
+        }
+        return '请求参数错误，请检查零件选择'
+      case 404:
+        if (detail.includes('零件')) {
+          return '部分零件不存在，请检查零件列表'
+        }
+        return '请求的资源不存在'
+      case 429:
+        return '请求过于频繁，请稍后再试'
+      case 500:
+        return '服务器内部错误，请稍后重试'
+      case 503:
+        return '兼容性检查服务暂时不可用'
+      default:
+        return detail || `服务器错误 (${status})`
+    }
+  } else if (error.request) {
+    return '网络连接失败，请检查网络状态'
+  } else {
+    return error.message || '未知错误，请重试'
+  }
+}
+
+// ==================== 缓存管理 ====================
+
+/**
+ * 兼容性检查结果缓存管理
+ */
+class CompatibilityCache {
+  constructor(ttl = 5 * 60 * 1000) { // 默认5分钟过期
+    this.cache = new Map()
+    this.ttl = ttl
+  }
+  
+  /**
+   * 生成缓存键
+   * @param {Array} partIds - 零件ID数组
+   * @returns {string} 缓存键
+   */
+  generateKey(partIds) {
+    return partIds.sort((a, b) => a - b).join(',')
+  }
+  
+  /**
+   * 设置缓存
+   * @param {Array} partIds - 零件ID数组
+   * @param {Object} result - 检查结果
+   */
+  set(partIds, result) {
+    const key = this.generateKey(partIds)
+    const expiry = Date.now() + this.ttl
+    this.cache.set(key, { result, expiry })
+  }
+  
+  /**
+   * 获取缓存
+   * @param {Array} partIds - 零件ID数组
+   * @returns {Object|null} 缓存的结果或null
+   */
+  get(partIds) {
+    const key = this.generateKey(partIds)
+    const item = this.cache.get(key)
+    
+    if (!item) return null
+    
+    if (Date.now() > item.expiry) {
+      this.cache.delete(key)
+      return null
+    }
+    
+    return item.result
+  }
+  
+  /**
+   * 清除过期缓存
+   */
+  cleanup() {
+    const now = Date.now()
+    for (const [key, item] of this.cache.entries()) {
+      if (now > item.expiry) {
+        this.cache.delete(key)
+      }
+    }
+  }
+  
+  /**
+   * 清空所有缓存
+   */
+  clear() {
+    this.cache.clear()
+  }
+}
+
+// 导出缓存实例
+export const compatibilityCache = new CompatibilityCache()
+
+// 定期清理过期缓存
+setInterval(() => {
+  compatibilityCache.cleanup()
+}, 60000) // 每分钟清理一次
+
+// ==================== 便捷封装方法 ====================
+
+/**
+ * 快速兼容性检查（带缓存）
+ * @param {Array} partIds - 零件ID数组
+ * @param {Object} options - 选项
+ * @returns {Promise<Object>} 检查结果
+ */
+export const quickCompatibilityCheck = async (partIds, options = {}) => {
+  // 先尝试从缓存获取
+  if (options.useCache !== false) {
+    const cached = compatibilityCache.get(partIds)
+    if (cached) {
+      return { ...cached, cached: true }
+    }
+  }
+  
+  try {
+    const response = await compatibilityAPI.check({
+      part_ids: partIds,
+      include_cache: options.include_cache !== false,
+      detail_level: options.detail_level || 'standard'
+    })
+    
+    const result = response.data
+    
+    // 缓存结果
+    if (options.useCache !== false) {
+      compatibilityCache.set(partIds, result)
+    }
+    
+    return result
+  } catch (error) {
+    throw new Error(handleCompatibilityError(error))
+  }
+}
+
+/**
+ * 获取零件的兼容性建议（带缓存）
+ * @param {number} partId - 零件ID
+ * @param {Object} options - 选项
+ * @returns {Promise<Array>} 建议零件列表
+ */
+export const getCompatibilitySuggestions = async (partId, options = {}) => {
+  try {
+    const response = await compatibilityAPI.suggestions(partId, options)
+    return response.data
+  } catch (error) {
+    console.error('获取兼容性建议失败:', error)
+    return []
+  }
+}
+
+/**
+ * 搜索兼容零件（增强版）
+ * @param {Array} selectedParts - 已选零件ID数组
+ * @param {Object} filters - 筛选条件
+ * @returns {Promise<Object>} 搜索结果
+ */
+export const searchCompatibleParts = async (selectedParts, filters = {}) => {
+  try {
+    const response = await compatibilityAPI.search({
+      selected_parts: selectedParts,
+      target_categories: filters.categories,
+      min_compatibility_score: filters.minScore || 50,
+      limit: filters.limit || 20,
+      include_theoretical: filters.includeTheoretical !== false
+    })
+    
+    return response.data
+  } catch (error) {
+    throw new Error(handleCompatibilityError(error))
+  }
+}
+
 export default api

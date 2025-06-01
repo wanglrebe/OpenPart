@@ -65,6 +65,22 @@ export const partsAPI = {
     return axios.get(`/api/public/compare/compare-suggestions/${partId}`, {
       params: { limit }
     })
+  },
+  // 获取筛选器元数据
+  getFiltersMetadata() {
+    return api.get('/filters/metadata')
+  },
+  
+  // 高级搜索（带动态筛选）
+  advancedSearch(params = {}) {
+    return api.get('/search/advanced', { params })
+  },
+  
+  // 获取筛选预览数量
+  getFilterPreview(params = {}) {
+    return api.get('/search/advanced', { 
+      params: { ...params, limit: 1, preview: true } 
+    })
   }
 }
 
@@ -999,5 +1015,406 @@ export const searchCompatibleParts = async (selectedParts, filters = {}) => {
     throw new Error(handleCompatibilityError(error))
   }
 }
+
+// 修复后的筛选器工具函数 - 替换现有api.js中的相关部分
+
+// 新增：高级筛选器管理器（最终修复版本）
+class AdvancedFiltersManager {
+  constructor() {
+    this.presetsKey = 'openpart_filter_presets'
+    this.recentFiltersKey = 'openpart_recent_filters'
+    this.maxRecentFilters = 5
+  }
+  
+  // 检查是否有激活的筛选
+  hasActiveFilters(filters) {
+    if (!filters) return false
+    
+    return (filters.categories && Array.isArray(filters.categories) && filters.categories.length > 0) ||
+           (filters.category && filters.category !== '') || // 兼容旧版本
+           Object.keys(filters.numeric_filters || {}).some(key => {
+             const range = filters.numeric_filters[key]
+             return range && (range.min !== null || range.max !== null)
+           }) ||
+           Object.keys(filters.enum_filters || {}).some(key => {
+             const values = filters.enum_filters[key]
+             return Array.isArray(values) && values.length > 0
+           }) ||
+           Object.keys(filters.boolean_filters || {}).some(key => 
+             filters.boolean_filters[key] !== null && filters.boolean_filters[key] !== undefined
+           )
+  }
+  
+  // 保存最近使用的筛选
+  saveRecentFilter(filters) {
+    try {
+      if (!this.hasActiveFilters(filters)) return
+      
+      const recentFilters = this.getRecentFilters()
+      
+      // 生成筛选的唯一标识
+      const filterHash = this.hashFilters(filters)
+      
+      // 移除已存在的相同筛选
+      const filteredRecent = recentFilters.filter(f => f.hash !== filterHash)
+      
+      // 添加新的筛选到开头
+      filteredRecent.unshift({
+        hash: filterHash,
+        filters: JSON.parse(JSON.stringify(filters)),
+        timestamp: new Date().toISOString(),
+        description: this.generateFilterDescription(filters)
+      })
+      
+      // 限制数量
+      const limited = filteredRecent.slice(0, this.maxRecentFilters)
+      
+      localStorage.setItem(this.recentFiltersKey, JSON.stringify(limited))
+    } catch (error) {
+      console.error('保存最近筛选失败:', error)
+    }
+  }
+  
+  // 获取最近使用的筛选
+  getRecentFilters() {
+    try {
+      const stored = localStorage.getItem(this.recentFiltersKey)
+      return stored ? JSON.parse(stored) : []
+    } catch (error) {
+      console.error('获取最近筛选失败:', error)
+      return []
+    }
+  }
+  
+  // 生成筛选的哈希值
+  hashFilters(filters) {
+    const filterString = JSON.stringify(filters, Object.keys(filters).sort())
+    let hash = 0
+    for (let i = 0; i < filterString.length; i++) {
+      const char = filterString.charCodeAt(i)
+      hash = ((hash << 5) - hash) + char
+      hash = hash & hash // 转换为32位整数
+    }
+    return hash.toString(36)
+  }
+  
+  // 生成筛选描述
+  generateFilterDescription(filters) {
+    const parts = []
+    
+    // 处理分类（支持多选）
+    if (filters.categories && Array.isArray(filters.categories) && filters.categories.length > 0) {
+      if (filters.categories.length === 1) {
+        parts.push(`分类: ${filters.categories[0]}`)
+      } else {
+        parts.push(`分类: ${filters.categories.slice(0, 2).join(', ')}${filters.categories.length > 2 ? ' 等' : ''}`)
+      }
+    } else if (filters.category && filters.category !== '') {
+      parts.push(`分类: ${filters.category}`)
+    }
+    
+    // 处理数值筛选
+    if (filters.numeric_filters) {
+      Object.entries(filters.numeric_filters).forEach(([field, range]) => {
+        if (range && (range.min !== null || range.max !== null)) {
+          const min = range.min ?? '不限'
+          const max = range.max ?? '不限'
+          parts.push(`${field}: ${min}-${max}`)
+        }
+      })
+    }
+    
+    // 处理枚举筛选
+    if (filters.enum_filters) {
+      Object.entries(filters.enum_filters).forEach(([field, values]) => {
+        if (Array.isArray(values) && values.length > 0) {
+          const displayValues = values.length > 2 
+            ? `${values.slice(0, 2).join(', ')} 等${values.length}项`
+            : values.join(', ')
+          parts.push(`${field}: ${displayValues}`)
+        }
+      })
+    }
+    
+    // 处理布尔筛选
+    if (filters.boolean_filters) {
+      Object.entries(filters.boolean_filters).forEach(([field, value]) => {
+        if (value !== null && value !== undefined) {
+          parts.push(`${field}: ${value ? '是' : '否'}`)
+        }
+      })
+    }
+    
+    return parts.length > 0 ? parts.join(' | ') : '默认筛选'
+  }
+}
+
+// 筛选器工具函数（最终修复版本）
+export const filtersUtils = {
+  // 将筛选器对象转换为URL查询参数
+  filtersToQuery(filters) {
+    const query = {}
+    
+    // 处理分类（支持多选和单选）
+    if (filters.categories && Array.isArray(filters.categories) && filters.categories.length > 0) {
+      query.categories = filters.categories.join(',')
+    } else if (filters.category && filters.category !== '') {
+      query.category = filters.category
+    }
+    
+    // 数值筛选
+    if (filters.numeric_filters) {
+      const numericParts = []
+      Object.entries(filters.numeric_filters).forEach(([field, range]) => {
+        if (range && (range.min !== null || range.max !== null)) {
+          const min = range.min !== null ? range.min : ''
+          const max = range.max !== null ? range.max : ''
+          numericParts.push(`${field}:${min}:${max}`)
+        }
+      })
+      if (numericParts.length > 0) {
+        query.numeric_filters = numericParts.join(',')
+      }
+    }
+    
+    // 枚举筛选
+    if (filters.enum_filters) {
+      const enumParts = []
+      Object.entries(filters.enum_filters).forEach(([field, values]) => {
+        if (Array.isArray(values) && values.length > 0) {
+          // 清理和验证值
+          const cleanValues = values
+            .filter(v => v && typeof v === 'string' && v.trim())
+            .map(v => v.trim())
+            .filter(v => v.length > 0)
+          
+          if (cleanValues.length > 0) {
+            enumParts.push(`${field}:${cleanValues.join(',')}`)
+          }
+        }
+      })
+      if (enumParts.length > 0) {
+        query.enum_filters = enumParts.join('|')
+      }
+    }
+    
+    // 布尔筛选
+    if (filters.boolean_filters) {
+      const booleanParts = []
+      Object.entries(filters.boolean_filters).forEach(([field, value]) => {
+        if (value !== null && value !== undefined) {
+          booleanParts.push(`${field}:${value}`)
+        }
+      })
+      if (booleanParts.length > 0) {
+        query.boolean_filters = booleanParts.join(',')
+      }
+    }
+    
+    return query
+  },
+  
+  // 从URL查询参数解析筛选器
+  queryToFilters(query) {
+    const filters = {
+      categories: [],
+      numeric_filters: {},
+      enum_filters: {},
+      boolean_filters: {}
+    }
+    
+    // 解析分类（支持多选和单选）
+    if (query.categories) {
+      filters.categories = query.categories.split(',').filter(c => c.trim()).map(c => c.trim())
+    } else if (query.category) {
+      filters.categories = [query.category.trim()]
+      filters.category = query.category.trim() // 保持兼容性
+    }
+    
+    // 解析数值筛选
+    if (query.numeric_filters) {
+      try {
+        query.numeric_filters.split(',').forEach(part => {
+          const [field, min, max] = part.split(':')
+          if (field && field.trim()) {
+            filters.numeric_filters[field.trim()] = {
+              min: min !== '' && min !== undefined && !isNaN(parseFloat(min)) ? parseFloat(min) : null,
+              max: max !== '' && max !== undefined && !isNaN(parseFloat(max)) ? parseFloat(max) : null
+            }
+          }
+        })
+      } catch (error) {
+        console.error('解析数值筛选失败:', error)
+      }
+    }
+    
+    // 解析枚举筛选
+    if (query.enum_filters) {
+      try {
+        query.enum_filters.split('|').forEach(part => {
+          if (part.includes(':')) {
+            const [field, ...valueParts] = part.split(':')
+            if (field && field.trim() && valueParts.length > 0) {
+              const valuesString = valueParts.join(':')
+              const values = valuesString.split(',')
+                .map(v => v.trim())
+                .filter(v => v.length > 0)
+              
+              if (values.length > 0) {
+                filters.enum_filters[field.trim()] = values
+              }
+            }
+          }
+        })
+      } catch (error) {
+        console.error('解析枚举筛选失败:', error)
+      }
+    }
+    
+    // 解析布尔筛选
+    if (query.boolean_filters) {
+      try {
+        query.boolean_filters.split(',').forEach(part => {
+          const [field, value] = part.split(':')
+          if (field && field.trim() && value !== undefined) {
+            filters.boolean_filters[field.trim()] = value.trim() === 'true'
+          }
+        })
+      } catch (error) {
+        console.error('解析布尔筛选失败:', error)
+      }
+    }
+    
+    return filters
+  },
+  
+  // 合并筛选器
+  mergeFilters(baseFilters, newFilters) {
+    const merged = {
+      categories: [],
+      numeric_filters: { ...baseFilters.numeric_filters },
+      enum_filters: { ...baseFilters.enum_filters },
+      boolean_filters: { ...baseFilters.boolean_filters }
+    }
+    
+    // 合并分类
+    if (newFilters.categories && Array.isArray(newFilters.categories)) {
+      merged.categories = [...newFilters.categories]
+    } else if (baseFilters.categories && Array.isArray(baseFilters.categories)) {
+      merged.categories = [...baseFilters.categories]
+    }
+    
+    // 兼容旧版本的category字段
+    if (newFilters.category && newFilters.category !== '') {
+      merged.categories = [newFilters.category]
+      merged.category = newFilters.category
+    } else if (baseFilters.category && baseFilters.category !== '') {
+      merged.categories = [baseFilters.category]
+      merged.category = baseFilters.category
+    }
+    
+    // 合并其他筛选器
+    if (newFilters.numeric_filters) {
+      Object.assign(merged.numeric_filters, newFilters.numeric_filters)
+    }
+    if (newFilters.enum_filters) {
+      Object.assign(merged.enum_filters, newFilters.enum_filters)
+    }
+    if (newFilters.boolean_filters) {
+      Object.assign(merged.boolean_filters, newFilters.boolean_filters)
+    }
+    
+    return merged
+  },
+  
+  // 清空筛选器
+  clearFilters() {
+    return {
+      categories: [],
+      numeric_filters: {},
+      enum_filters: {},
+      boolean_filters: {}
+    }
+  },
+  
+  // 格式化筛选器显示文本
+  formatFilterDisplay(filters, metadata) {
+    const parts = []
+    
+    try {
+      // 处理分类显示
+      if (filters.categories && Array.isArray(filters.categories) && filters.categories.length > 0) {
+        if (filters.categories.length === 1) {
+          parts.push(`分类: ${filters.categories[0]}`)
+        } else {
+          parts.push(`分类: ${filters.categories.slice(0, 2).join(', ')}${filters.categories.length > 2 ? ` 等${filters.categories.length}项` : ''}`)
+        }
+      } else if (filters.category && filters.category !== '') {
+        parts.push(`分类: ${filters.category}`)
+      }
+      
+      // 数值筛选显示
+      if (filters.numeric_filters) {
+        Object.entries(filters.numeric_filters).forEach(([field, range]) => {
+          if (range && (range.min !== null || range.max !== null)) {
+            const fieldMeta = metadata?.numeric_filters?.find(f => f.field === field)
+            const label = fieldMeta?.label || field
+            const unit = fieldMeta?.unit || ''
+            
+            let rangeText = ''
+            if (range.min !== null && range.max !== null) {
+              rangeText = `${range.min}-${range.max}${unit}`
+            } else if (range.min !== null) {
+              rangeText = `≥${range.min}${unit}`
+            } else if (range.max !== null) {
+              rangeText = `≤${range.max}${unit}`
+            }
+            
+            parts.push(`${label}: ${rangeText}`)
+          }
+        })
+      }
+      
+      // 枚举筛选显示
+      if (filters.enum_filters) {
+        Object.entries(filters.enum_filters).forEach(([field, values]) => {
+          if (Array.isArray(values) && values.length > 0) {
+            // 确保values是有效的字符串数组
+            const validValues = values.filter(v => v && typeof v === 'string' && v.trim())
+            if (validValues.length > 0) {
+              const fieldMeta = metadata?.enum_filters?.find(f => f.field === field)
+              const label = fieldMeta?.label || field
+              
+              const displayValues = validValues.length > 3 
+                ? `${validValues.slice(0, 3).join(', ')} 等${validValues.length}项`
+                : validValues.join(', ')
+              
+              parts.push(`${label}: ${displayValues}`)
+            }
+          }
+        })
+      }
+      
+      // 布尔筛选显示
+      if (filters.boolean_filters) {
+        Object.entries(filters.boolean_filters).forEach(([field, value]) => {
+          if (value !== null && value !== undefined) {
+            const fieldMeta = metadata?.boolean_filters?.find(f => f.field === field)
+            const label = fieldMeta?.label || field
+            parts.push(`${label}: ${value ? '是' : '否'}`)
+          }
+        })
+      }
+    } catch (error) {
+      console.error('格式化筛选器显示文本时出错:', error)
+      return '筛选条件格式错误'
+    }
+    
+    return parts.length > 0 ? parts.join(' | ') : '无筛选条件'
+  }
+}
+
+// 更新的advancedFiltersManager实例
+export const advancedFiltersManager = new AdvancedFiltersManager()
 
 export default api

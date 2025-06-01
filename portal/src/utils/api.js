@@ -507,7 +507,7 @@ export const compatibilityAPI = {
    * 兼容性检查 (2-10个零件)
    */
   check(data) {
-    return axios.post('/api/public/compatibility/check', {  // 直接使用axios，不用api实例
+    return axios.post('/api/public/compatibility/check', {
       part_ids: data.part_ids,
       include_cache: data.include_cache !== false,
       detail_level: data.detail_level || 'standard'
@@ -515,16 +515,23 @@ export const compatibilityAPI = {
   },
 
   /**
-   * 兼容性搜索
+   * 兼容性搜索 - 修复参数格式
    */
   search(data) {
-    return axios.post('/api/public/compatibility/search', {
-      selected_parts: data.selected_parts,
-      target_categories: data.target_categories || null,
-      min_compatibility_score: data.min_compatibility_score || 50,
-      limit: data.limit || 20,
-      include_theoretical: data.include_theoretical !== false
-    })
+    console.log('原始兼容性搜索参数:', data)
+    
+    // 根据后端 CompatibilitySearchRequest schema 修正参数
+    const requestData = {
+      selected_parts: data.selected_parts, // 已选择的零件ID列表
+      target_categories: data.target_categories || null, // 目标零件类别
+      min_compatibility_score: data.min_compatibility_score || 50, // 最低兼容性评分
+      limit: data.limit || 20, // 返回结果数量限制
+      include_theoretical: data.include_theoretical !== false // 是否包含理论兼容的零件
+    }
+    
+    console.log('发送给后端的兼容性搜索参数:', requestData)
+    
+    return axios.post('/api/public/compatibility/search', requestData)
   },
 
   /**
@@ -835,18 +842,33 @@ export const handleCompatibilityError = (error) => {
   if (error.response) {
     const status = error.response.status
     const detail = error.response.data?.detail || ''
+    const errors = error.response.data?.errors || []
+    
+    console.log('错误详情:', { status, detail, errors, data: error.response.data })
     
     switch (status) {
       case 400:
         if (detail.includes('零件')) {
           return detail
         }
-        return '请求参数错误，请检查零件选择'
+        if (detail.includes('至少需要') || detail.includes('最多支持')) {
+          return detail
+        }
+        return '请求参数错误，请检查零件选择和筛选条件'
       case 404:
         if (detail.includes('零件')) {
           return '部分零件不存在，请检查零件列表'
         }
         return '请求的资源不存在'
+      case 422:
+        // 处理验证错误
+        if (errors && errors.length > 0) {
+          return `数据验证失败: ${errors.map(e => e.msg || e.message || e).join(', ')}`
+        }
+        if (detail) {
+          return `数据格式错误: ${detail}`
+        }
+        return '数据格式错误，请检查输入参数'
       case 429:
         return '请求过于频繁，请稍后再试'
       case 500:

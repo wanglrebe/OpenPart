@@ -1,4 +1,4 @@
-<!-- portal/src/views/ProjectDetail.vue (优化版本 - 显示零件名称和缩略图) -->
+<!-- portal/src/views/ProjectDetail.vue (兼容性功能集成版本) -->
 <template>
   <div class="project-detail-page">
     <!-- 头部导航 -->
@@ -58,6 +58,35 @@
             <p v-if="project.description" class="project-description">
               {{ project.description }}
             </p>
+            
+            <!-- 新增：项目兼容性快速检查按钮 -->
+            <div class="project-compatibility-actions">
+              <button 
+                class="btn btn-compatibility"
+                :disabled="!canCheckCompatibility"
+                @click="checkProjectCompatibility"
+                :title="getCompatibilityButtonTooltip()"
+              >
+                <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                检查项目兼容性
+                <span v-if="compatiblePartsCount > 0" class="parts-count">({{ compatiblePartsCount }}个零件)</span>
+              </button>
+              
+              <button 
+                v-if="projectCompatibilityStatus"
+                class="compatibility-status-btn"
+                :class="projectCompatibilityStatus.statusClass"
+                @click="showCompatibilityDetails = !showCompatibilityDetails"
+              >
+                <span class="status-icon">{{ projectCompatibilityStatus.icon }}</span>
+                <span class="status-text">{{ projectCompatibilityStatus.text }}</span>
+                <svg class="expand-icon" :class="{ expanded: showCompatibilityDetails }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            </div>
           </div>
 
           <div class="project-stats">
@@ -88,6 +117,64 @@
                 <span class="needed">{{ getNeededCount() }} 缺少</span>
               </div>
             </div>
+          </div>
+        </div>
+
+        <!-- 新增：项目兼容性详情面板 -->
+        <div v-if="showCompatibilityDetails && projectCompatibilityStatus" class="compatibility-details-panel">
+          <div class="panel-header">
+            <h3>项目兼容性分析</h3>
+            <button class="panel-close" @click="showCompatibilityDetails = false">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          
+          <div class="compatibility-summary">
+            <div class="summary-item">
+              <span class="summary-label">整体评分:</span>
+              <span class="summary-value" :class="projectCompatibilityStatus.gradeClass">
+                {{ projectCompatibilityStatus.score }}分
+              </span>
+            </div>
+            <div class="summary-item">
+              <span class="summary-label">兼容等级:</span>
+              <span class="summary-badge" :class="projectCompatibilityStatus.gradeClass">
+                {{ projectCompatibilityStatus.gradeText }}
+              </span>
+            </div>
+            <div class="summary-item">
+              <span class="summary-label">检查零件:</span>
+              <span class="summary-value">{{ compatiblePartsCount }}个</span>
+            </div>
+          </div>
+          
+          <div v-if="projectCompatibilityResult?.warnings?.length > 0" class="compatibility-warnings">
+            <h4>注意事项</h4>
+            <ul class="warnings-list">
+              <li v-for="warning in projectCompatibilityResult.warnings" :key="warning" class="warning-item">
+                <svg class="warning-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+                {{ warning }}
+              </li>
+            </ul>
+          </div>
+          
+          <div class="compatibility-actions">
+            <button class="btn btn-outline" @click="viewDetailedCompatibility">
+              <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              查看详细分析
+            </button>
+            <button class="btn btn-compatibility" @click="refreshCompatibilityCheck">
+              <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              重新检查
+            </button>
           </div>
         </div>
 
@@ -171,6 +258,16 @@
                     <span class="status-badge" :class="item.status">
                       {{ getStatusText(item.status) }}
                     </span>
+                    
+                    <!-- 新增：零件兼容性状态指示 -->
+                    <span 
+                      v-if="item.part_id && partCompatibilityStatus[item.part_id]"
+                      class="compatibility-indicator"
+                      :class="partCompatibilityStatus[item.part_id].statusClass"
+                      :title="partCompatibilityStatus[item.part_id].tooltip"
+                    >
+                      {{ partCompatibilityStatus[item.part_id].icon }}
+                    </span>
                   </div>
                 </div>
                 
@@ -214,12 +311,25 @@
                         <span v-if="getPartInfo(item.part_id)?.category" class="part-category-tag">
                           {{ getPartInfo(item.part_id).category }}
                         </span>
-                        <button 
-                          class="view-part-btn"
-                          @click="viewPartDetail(item.part_id)"
-                        >
-                          查看详情
-                        </button>
+                        <div class="part-actions">
+                          <button 
+                            class="view-part-btn"
+                            @click="viewPartDetail(item.part_id)"
+                          >
+                            查看详情
+                          </button>
+                          <!-- 新增：加入兼容性检查按钮 -->
+                          <button 
+                            class="add-to-compatibility-btn"
+                            @click="addPartToCompatibilityCheck(item.part_id)"
+                            :disabled="!item.part_id"
+                            title="加入兼容性检查"
+                          >
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -342,7 +452,9 @@ import { useRoute, useRouter } from 'vue-router'
 import ThemeToggle from '../components/ThemeToggle.vue'
 import PartSelector from '../components/PartSelector.vue'
 import { getTemplateById } from '../data/projectTemplates'
-import { partsAPI } from '../utils/api'
+import { partsAPI, compatibilityAPI, compatibilityHelpers } from '../utils/api'
+// 新增：导入兼容性检查管理器
+import { compatibilityCheckManager } from '../utils/compatibilityManager'
 
 export default {
   name: 'ProjectDetail',
@@ -365,6 +477,12 @@ export default {
     // 零件信息缓存和图片错误状态
     const partsCache = ref({})
     const imageErrors = ref({})
+    
+    // 新增：兼容性相关状态
+    const showCompatibilityDetails = ref(false)
+    const projectCompatibilityResult = ref(null)
+    const partCompatibilityStatus = ref({})
+    const compatibilityCheckInProgress = ref(false)
     
     // 消息提示
     const toast = ref({
@@ -431,6 +549,67 @@ export default {
       
       return project.value.items.filter(item => item.status === statusFilter.value)
     })
+
+    // 新增：计算可兼容性检查的零件
+    const compatibleParts = computed(() => {
+      if (!project.value) return []
+      
+      return project.value.items
+        .filter(item => item.part_id && item.status !== 'optional')
+        .map(item => ({
+          id: item.part_id,
+          name: getPartInfo(item.part_id)?.name || `零件 #${item.part_id}`,
+          category: getPartInfo(item.part_id)?.category || '',
+          image_url: getPartInfo(item.part_id)?.image_url
+        }))
+    })
+
+    // 新增：可兼容性检查的零件数量
+    const compatiblePartsCount = computed(() => {
+      return compatibleParts.value.length
+    })
+
+    // 新增：是否可以进行兼容性检查
+    const canCheckCompatibility = computed(() => {
+      return compatiblePartsCount.value >= 2
+    })
+
+    // 新增：项目兼容性状态
+    const projectCompatibilityStatus = computed(() => {
+      if (!projectCompatibilityResult.value) return null
+      
+      const result = projectCompatibilityResult.value
+      const grade = result.overall_compatibility_grade || 'theoretical'
+      const score = result.overall_score || 0
+      const isCompatible = result.is_overall_compatible !== false // 默认为true，除非明确为false
+      
+      console.log('计算项目兼容性状态:', { grade, score, isCompatible, result }) // 调试日志
+      
+      try {
+        const gradeInfo = compatibilityHelpers.formatGrade(grade)
+        
+        return {
+          icon: gradeInfo.icon,
+          text: isCompatible ? `项目兼容性良好` : `存在兼容性问题`,
+          score: score,
+          gradeText: gradeInfo.text,
+          gradeClass: grade,
+          statusClass: isCompatible ? 'compatible' : 'incompatible',
+          tooltip: `整体兼容性评分: ${score}分 - ${gradeInfo.description}`
+        }
+      } catch (error) {
+        console.error('计算项目兼容性状态失败:', error)
+        return {
+          icon: '❓',
+          text: '兼容性状态未知',
+          score: 0,
+          gradeText: '未知',
+          gradeClass: 'unknown',
+          statusClass: 'unknown',
+          tooltip: '无法确定兼容性状态'
+        }
+      }
+    })
     
     // 加载零件信息
     const loadPartInfo = async (partId) => {
@@ -492,6 +671,265 @@ export default {
       }
       
       loading.value = false
+    }
+
+    // 新增：检查项目兼容性
+    const checkProjectCompatibility = async () => {
+      if (!canCheckCompatibility.value) {
+        showToast({
+          type: 'warning',
+          message: '至少需要2个已选择的零件才能进行兼容性检查'
+        })
+        return
+      }
+
+      compatibilityCheckInProgress.value = true
+      
+      try {
+        const partIds = compatibleParts.value.map(p => p.id)
+        console.log('开始项目兼容性检查，零件ID:', partIds)
+        console.log('兼容零件详细信息:', compatibleParts.value)
+        
+        const response = await compatibilityAPI.check({
+          part_ids: partIds,
+          include_cache: true,
+          detail_level: 'standard'
+        })
+        
+        console.log('兼容性检查API响应:', response.data) // 调试日志
+        
+        if (!response.data) {
+          throw new Error('API返回数据为空')
+        }
+        
+        projectCompatibilityResult.value = response.data
+        
+        // 分析每个零件的兼容性状态
+        analyzePartCompatibilityStatus(response.data)
+        
+        showCompatibilityDetails.value = true
+        
+        showToast({
+          type: 'success',
+          message: `项目兼容性检查完成，整体评分：${response.data.overall_score || 0}分`
+        })
+        
+      } catch (error) {
+        console.error('项目兼容性检查失败:', error)
+        
+        let errorMessage = '兼容性检查失败，请稍后重试'
+        
+        if (error.response) {
+          // API错误响应
+          const status = error.response.status
+          const detail = error.response.data?.detail
+          
+          if (status === 400 && detail) {
+            errorMessage = detail
+          } else if (status === 404) {
+            errorMessage = '部分零件不存在，请检查零件列表'
+          } else if (status === 422) {
+            errorMessage = '请求参数错误，请检查零件选择'
+          }
+        } else if (error.request) {
+          errorMessage = '网络连接失败，请检查网络状态'
+        } else if (error.message) {
+          errorMessage = error.message
+        }
+        
+        showToast({
+          type: 'error',
+          message: errorMessage
+        })
+      }
+      
+      compatibilityCheckInProgress.value = false
+    }
+
+    // 新增：分析零件兼容性状态
+    const analyzePartCompatibilityStatus = (compatibilityResult) => {
+      try {
+        const status = {}
+        
+        console.log('分析兼容性结果:', compatibilityResult) // 调试日志
+        
+        if (compatibilityResult && compatibilityResult.part_combinations && Array.isArray(compatibilityResult.part_combinations)) {
+          console.log('part_combinations 数组长度:', compatibilityResult.part_combinations.length)
+          
+          compatibilityResult.part_combinations.forEach((combination, index) => {
+            console.log(`处理组合 ${index}:`, combination) // 调试每个组合
+            
+            // 安全检查所有必需属性
+            if (!combination) {
+              console.warn(`组合 ${index} 为空`)
+              return
+            }
+            
+            const partAId = combination.part_a_id
+            const partBId = combination.part_b_id
+            const isCompatible = combination.is_compatible
+            const score = combination.compatibility_score
+            const grade = combination.compatibility_grade
+            
+            console.log(`组合 ${index} 详情:`, { partAId, partBId, isCompatible, score, grade })
+            
+            // 检查必需的属性
+            if (partAId === undefined || partBId === undefined) {
+              console.warn(`组合 ${index} 缺少零件ID:`, { partAId, partBId })
+              return
+            }
+            
+            if (score === undefined || isCompatible === undefined) {
+              console.warn(`组合 ${index} 缺少兼容性信息:`, { score, isCompatible })
+              return
+            }
+            
+            // 为每个零件记录最低兼容性状态
+            const partIds = [partAId, partBId].filter(id => id !== undefined && id !== null)
+            
+            partIds.forEach(partId => {
+              try {
+                if (!status[partId] || status[partId].score > score) {
+                  const safeGrade = grade || 'theoretical'
+                  const gradeInfo = compatibilityHelpers.formatGrade(safeGrade)
+                  
+                  status[partId] = {
+                    score: score || 0,
+                    grade: safeGrade,
+                    icon: gradeInfo.icon,
+                    statusClass: isCompatible ? 'compatible' : 'incompatible',
+                    tooltip: `与其他零件兼容性: ${score || 0}分 - ${gradeInfo.text}`
+                  }
+                  
+                  console.log(`更新零件 ${partId} 状态:`, status[partId])
+                }
+              } catch (error) {
+                console.error(`处理零件 ${partId} 状态时出错:`, error)
+              }
+            })
+          })
+        } else {
+          console.warn('兼容性结果中没有有效的part_combinations数据:', compatibilityResult)
+        }
+        
+        partCompatibilityStatus.value = status
+        console.log('分析完成的零件兼容性状态:', status) // 调试日志
+        
+      } catch (error) {
+        console.error('分析零件兼容性状态时发生错误:', error)
+        console.error('错误详情:', error.stack)
+        
+        // 重置状态以避免UI显示错误
+        partCompatibilityStatus.value = {}
+        
+        // 不抛出错误，让主流程继续
+        console.warn('由于分析错误，零件兼容性状态已重置')
+      }
+    }
+
+    // 新增：添加零件到兼容性检查
+    const addPartToCompatibilityCheck = async (partId) => {
+      if (!partId) return
+      
+      try {
+        // 获取零件信息
+        const partInfo = await loadPartInfo(partId)
+        
+        const result = compatibilityCheckManager.addToCheck(partInfo)
+        
+        if (result.success) {
+          showToast({
+            type: 'success',
+            message: `已将 ${partInfo.name} 加入兼容性检查列表`
+          })
+        } else {
+          showToast({
+            type: 'warning',
+            message: result.message
+          })
+        }
+      } catch (error) {
+        console.error('添加零件到兼容性检查失败:', error)
+        showToast({
+          type: 'error',
+          message: '操作失败，请重试'
+        })
+      }
+    }
+
+    // 新增：导入项目零件到兼容性检查
+    const importProjectPartsToCompatibility = async () => {
+      if (compatiblePartsCount.value === 0) {
+        showToast({
+          type: 'warning',
+          message: '项目中没有可用于兼容性检查的零件'
+        })
+        return
+      }
+
+      try {
+        // 预加载所有零件信息
+        const partsWithInfo = await Promise.all(
+          compatibleParts.value.map(async (part) => {
+            const info = await loadPartInfo(part.id)
+            return {
+              id: part.id,
+              name: info.name,
+              category: info.category,
+              image_url: info.image_url
+            }
+          })
+        )
+
+        const result = compatibilityCheckManager.addMultipleToCheck(partsWithInfo)
+        
+        if (result.success) {
+          showToast({
+            type: 'success',
+            message: result.message,
+            action: {
+              text: '立即检查',
+              callback: () => {
+                hideToast()
+                router.push(compatibilityCheckManager.getCheckUrl())
+              }
+            }
+          })
+        } else {
+          showToast({
+            type: 'warning',
+            message: result.message
+          })
+        }
+      } catch (error) {
+        console.error('导入项目零件失败:', error)
+        showToast({
+          type: 'error',
+          message: '导入失败，请重试'
+        })
+      }
+    }
+
+    // 新增：获取兼容性按钮提示文本
+    const getCompatibilityButtonTooltip = () => {
+      if (compatiblePartsCount.value < 2) {
+        return `需要至少2个零件进行兼容性检查（当前：${compatiblePartsCount.value}个）`
+      }
+      return `检查项目中${compatiblePartsCount.value}个零件的兼容性`
+    }
+
+    // 新增：查看详细兼容性分析
+    const viewDetailedCompatibility = () => {
+      // 导入项目零件并跳转到兼容性检查页面
+      importProjectPartsToCompatibility()
+    }
+
+    // 新增：刷新兼容性检查
+    const refreshCompatibilityCheck = () => {
+      projectCompatibilityResult.value = null
+      partCompatibilityStatus.value = {}
+      showCompatibilityDetails.value = false
+      checkProjectCompatibility()
     }
     
     // 获取模板名称
@@ -555,6 +993,11 @@ export default {
       
       if (result.success) {
         project.value = result.project
+        
+        // 如果有兼容性结果，重新分析状态
+        if (projectCompatibilityResult.value) {
+          analyzePartCompatibilityStatus(projectCompatibilityResult.value)
+        }
       } else {
         showToast({
           type: 'error',
@@ -673,6 +1116,15 @@ export default {
       partsCache,
       imageErrors,
       filteredItems,
+      // 新增：兼容性相关
+      showCompatibilityDetails,
+      projectCompatibilityResult,
+      projectCompatibilityStatus,
+      partCompatibilityStatus,
+      compatibilityCheckInProgress,
+      compatiblePartsCount,
+      canCheckCompatibility,
+      // 方法
       getTemplateName,
       getTemplateItem,
       getOwnedCount,
@@ -690,13 +1142,20 @@ export default {
       viewPartDetail,
       exportProject,
       showToast,
-      hideToast
+      hideToast,
+      // 新增：兼容性相关方法
+      checkProjectCompatibility,
+      addPartToCompatibilityCheck,
+      importProjectPartsToCompatibility,
+      getCompatibilityButtonTooltip,
+      viewDetailedCompatibility,
+      refreshCompatibilityCheck
     }
   }
 }
 </script>
 
-/* ProjectDetail.vue 样式完整版 */
+/* ProjectDetail.vue 样式完整版 - 兼容性集成 */
 <style scoped>
 .project-detail-page {
   min-height: 100vh;
@@ -847,7 +1306,298 @@ export default {
   font-size: 16px;
   color: var(--text-secondary);
   line-height: 1.6;
+  margin: 0 0 16px 0;
+}
+
+/* 新增：项目兼容性操作区域 */
+.project-compatibility-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.btn-compatibility {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-weight: 500;
+}
+
+.btn-compatibility:hover:not(:disabled) {
+  background: linear-gradient(135deg, #059669, #047857);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+.btn-compatibility:disabled {
+  background: var(--text-muted);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.btn-compatibility .btn-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.parts-count {
+  font-size: 12px;
+  font-weight: normal;
+  opacity: 0.9;
+}
+
+.compatibility-status-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.compatibility-status-btn:hover {
+  background: var(--bg-primary);
+  border-color: var(--primary);
+}
+
+.compatibility-status-btn.compatible {
+  border-color: #10b981;
+  background: color-mix(in srgb, #10b981 5%, var(--bg-card));
+}
+
+.compatibility-status-btn.incompatible {
+  border-color: #ef4444;
+  background: color-mix(in srgb, #ef4444 5%, var(--bg-card));
+}
+
+.status-icon {
+  font-size: 16px;
+}
+
+.status-text {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.expand-icon {
+  width: 16px;
+  height: 16px;
+  transition: transform 0.2s ease;
+}
+
+.expand-icon.expanded {
+  transform: rotate(180deg);
+}
+
+/* 新增：兼容性详情面板 */
+.compatibility-details-panel {
+  background: var(--bg-card);
+  border: 1px solid #10b981;
+  border-radius: 12px;
+  margin-bottom: 24px;
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-color);
+  background: color-mix(in srgb, #10b981 5%, var(--bg-card));
+}
+
+.panel-header h3 {
   margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.panel-close {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.panel-close:hover {
+  background: var(--bg-primary);
+}
+
+.panel-close svg {
+  width: 16px;
+  height: 16px;
+}
+
+.compatibility-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+  padding: 20px 24px;
+}
+
+.summary-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.summary-label {
+  font-size: 14px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.summary-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.summary-value.official_support {
+  color: #10b981;
+}
+
+.summary-value.unofficial_support {
+  color: #3b82f6;
+}
+
+.summary-value.theoretical {
+  color: #f59e0b;
+}
+
+.summary-value.incompatible {
+  color: #ef4444;
+}
+
+.summary-badge {
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.summary-badge.official_support {
+  background: color-mix(in srgb, #10b981 15%, transparent);
+  color: #10b981;
+}
+
+.summary-badge.unofficial_support {
+  background: color-mix(in srgb, #3b82f6 15%, transparent);
+  color: #3b82f6;
+}
+
+.summary-badge.theoretical {
+  background: color-mix(in srgb, #f59e0b 15%, transparent);
+  color: #f59e0b;
+}
+
+.summary-badge.incompatible {
+  background: color-mix(in srgb, #ef4444 15%, transparent);
+  color: #ef4444;
+}
+
+.compatibility-warnings {
+  padding: 0 24px 20px;
+}
+
+.compatibility-warnings h4,
+.compatibility-recommendations h4 {
+  margin: 0 0 12px 0;
+  font-size: 16px;
+  color: var(--text-primary);
+}
+
+.warnings-list,
+.recommendations-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.warning-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 12px;
+  background: color-mix(in srgb, #f59e0b 5%, var(--bg-card));
+  border-left: 3px solid #f59e0b;
+  border-radius: 0 6px 6px 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.recommendation-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 12px;
+  background: color-mix(in srgb, #10b981 5%, var(--bg-card));
+  border-left: 3px solid #10b981;
+  border-radius: 0 6px 6px 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.warning-icon {
+  width: 16px;
+  height: 16px;
+  color: #f59e0b;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.recommendation-icon {
+  width: 16px;
+  height: 16px;
+  color: #10b981;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.compatibility-recommendations {
+  padding: 0 24px 20px;
+}
+
+.compatibility-actions {
+  display: flex;
+  gap: 12px;
+  padding: 20px 24px;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-secondary);
 }
 
 .project-stats {
@@ -1042,6 +1792,8 @@ export default {
 .part-badges {
   display: flex;
   gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
 .required-badge,
@@ -1083,6 +1835,25 @@ export default {
 .status-badge.optional {
   background: color-mix(in srgb, var(--text-muted) 15%, transparent);
   color: var(--text-muted);
+}
+
+/* 新增：兼容性指示器 */
+.compatibility-indicator {
+  padding: 2px 6px;
+  font-size: 10px;
+  border-radius: 3px;
+  font-weight: 600;
+  cursor: help;
+}
+
+.compatibility-indicator.compatible {
+  background: color-mix(in srgb, #10b981 15%, transparent);
+  color: #10b981;
+}
+
+.compatibility-indicator.incompatible {
+  background: color-mix(in srgb, #ef4444 15%, transparent);
+  color: #ef4444;
 }
 
 .part-description {
@@ -1191,6 +1962,13 @@ export default {
   font-weight: 500;
 }
 
+/* 新增：零件操作按钮区域 */
+.part-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
 .view-part-btn {
   padding: 4px 8px;
   font-size: 12px;
@@ -1200,11 +1978,38 @@ export default {
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.2s ease;
-  align-self: flex-start;
 }
 
 .view-part-btn:hover {
   background: var(--secondary);
+}
+
+.add-to-compatibility-btn {
+  padding: 4px 6px;
+  background: #10b981;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.add-to-compatibility-btn:hover:not(:disabled) {
+  background: #059669;
+}
+
+.add-to-compatibility-btn:disabled {
+  background: var(--text-muted);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.add-to-compatibility-btn svg {
+  width: 12px;
+  height: 12px;
 }
 
 .change-part-btn {
@@ -1395,6 +2200,11 @@ export default {
   background: color-mix(in srgb, var(--primary) 5%, var(--bg-card));
 }
 
+.toast-message.warning {
+  border-color: #f59e0b;
+  background: color-mix(in srgb, #f59e0b 5%, var(--bg-card));
+}
+
 .toast-content {
   display: flex;
   align-items: center;
@@ -1418,6 +2228,10 @@ export default {
 
 .toast-message.info .toast-icon {
   color: var(--primary);
+}
+
+.toast-message.warning .toast-icon {
+  color: #f59e0b;
 }
 
 .toast-text {
@@ -1467,6 +2281,19 @@ export default {
   .filter-buttons {
     justify-content: center;
     flex-wrap: wrap;
+  }
+
+  .project-compatibility-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .compatibility-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .compatibility-actions {
+    flex-direction: column;
   }
 }
 
@@ -1537,6 +2364,22 @@ export default {
     font-size: 11px;
     padding: 3px 6px;
   }
+
+  .add-to-compatibility-btn {
+    padding: 3px 4px;
+  }
+
+  .panel-header {
+    padding: 16px;
+  }
+
+  .compatibility-summary {
+    padding: 16px;
+  }
+
+  .compatibility-actions {
+    padding: 16px;
+  }
 }
 
 @keyframes spin {
@@ -1559,5 +2402,38 @@ export default {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* 通用按钮样式 */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: none;
+}
+
+.btn-outline {
+  background: transparent;
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+.btn-outline:hover {
+  background: var(--bg-secondary);
+  border-color: var(--primary);
+}
+
+.btn-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
 }
 </style>

@@ -193,19 +193,19 @@ export default {
   props: {
     targetCategory: {
       type: String,
-      required: true
+      default: '' // 提供默认值，避免 undefined
     },
     isRequired: {
       type: Boolean,
-      default: false
+      default: false // 提供默认值
     },
     currentPartId: {
-      type: Number,
+      type: [String, Number], // 允许字符串和数字类型
       default: null
     },
     templateItem: {
       type: Object,
-      default: null
+      default: () => null // 使用函数返回默认值
     }
   },
   emits: ['close', 'select', 'view-detail'],

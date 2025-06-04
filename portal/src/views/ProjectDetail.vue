@@ -311,22 +311,28 @@
                         <span v-if="getPartInfo(item.part_id)?.category" class="part-category-tag">
                           {{ getPartInfo(item.part_id).category }}
                         </span>
+                        <!-- 在零件操作按钮区域，将原来的按钮替换为以下代码： -->
+
                         <div class="part-actions">
-                          <button 
-                            class="view-part-btn"
-                            @click="viewPartDetail(item.part_id)"
-                          >
+                          <button class="view-part-btn" @click="viewPartDetail(item.part_id)">
                             查看详情
                           </button>
-                          <!-- 新增：加入兼容性检查按钮 -->
+                          <!-- 修改后的兼容性检查按钮 - 使用激活/非激活样式 -->
                           <button 
-                            class="add-to-compatibility-btn"
-                            @click="addPartToCompatibilityCheck(item.part_id)"
+                            class="compatibility-check-btn"
+                            :class="{ active: partCompatibilityCheckStatus[item.part_id] }"
+                            @click="togglePartCompatibilityCheck(item.part_id)"
                             :disabled="!item.part_id"
-                            title="加入兼容性检查"
+                            :title="partCompatibilityCheckStatus[item.part_id] ? '从兼容性检查中移除' : '加入兼容性检查'"
                           >
+                            <!-- 始终使用检查图标，通过样式区分状态 -->
                             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              <path 
+                                stroke-linecap="round" 
+                                stroke-linejoin="round" 
+                                stroke-width="2" 
+                                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" 
+                              />
                             </svg>
                           </button>
                         </div>
@@ -483,6 +489,8 @@ export default {
     const projectCompatibilityResult = ref(null)
     const partCompatibilityStatus = ref({})
     const compatibilityCheckInProgress = ref(false)
+
+    const partCompatibilityCheckStatus = ref({})
     
     // 消息提示
     const toast = ref({
@@ -668,6 +676,9 @@ export default {
         
         // 并行加载所有零件信息
         await Promise.all(partIds.map(partId => loadPartInfo(partId)))
+        
+        // 更新兼容性检查状态
+        updatePartCompatibilityCheckStatus()
       }
       
       loading.value = false
@@ -828,20 +839,49 @@ export default {
     }
 
     // 新增：添加零件到兼容性检查
-    const addPartToCompatibilityCheck = async (partId) => {
+    const togglePartCompatibilityCheck = async (partId) => {
       if (!partId) return
       
       try {
         // 获取零件信息
         const partInfo = await loadPartInfo(partId)
         
-        const result = compatibilityCheckManager.addToCheck(partInfo)
+        const isCurrentlyInCheck = partCompatibilityCheckStatus.value[partId]
+        let result
+        
+        if (isCurrentlyInCheck) {
+          // 如果已在检查列表中，则移除
+          result = compatibilityCheckManager.removeFromCheck(partId)
+        } else {
+          // 如果不在检查列表中，则添加
+          result = compatibilityCheckManager.addToCheck(partInfo)
+        }
         
         if (result.success) {
+          // 更新状态
+          updatePartCompatibilityCheckStatus()
+          
           showToast({
             type: 'success',
-            message: `已将 ${partInfo.name} 加入兼容性检查列表`
+            message: result.message
           })
+          
+          // 如果是添加操作且列表中有足够的零件，提示用户可以检查
+          if (!isCurrentlyInCheck && result.count >= 2) {
+            setTimeout(() => {
+              showToast({
+                type: 'info',
+                message: `兼容性检查列表已有${result.count}个零件，可以开始检查了！`,
+                action: {
+                  text: '立即检查',
+                  callback: () => {
+                    hideToast()
+                    router.push(compatibilityCheckManager.getCheckUrl())
+                  }
+                }
+              })
+            }, 1000)
+          }
         } else {
           showToast({
             type: 'warning',
@@ -849,7 +889,7 @@ export default {
           })
         }
       } catch (error) {
-        console.error('添加零件到兼容性检查失败:', error)
+        console.error('切换零件兼容性检查状态失败:', error)
         showToast({
           type: 'error',
           message: '操作失败，请重试'
@@ -908,6 +948,18 @@ export default {
           message: '导入失败，请重试'
         })
       }
+    }
+
+    const updatePartCompatibilityCheckStatus = () => {
+      const status = {}
+      if (project.value && project.value.items) {
+        project.value.items.forEach(item => {
+          if (item.part_id) {
+            status[item.part_id] = compatibilityCheckManager.isInCheck(item.part_id)
+          }
+        })
+      }
+      partCompatibilityCheckStatus.value = status
     }
 
     // 新增：获取兼容性按钮提示文本
@@ -1092,6 +1144,9 @@ export default {
     const handleStorageChange = (e) => {
       if (e.key === 'openpart_projects') {
         loadProject()
+      } else if (e.key === 'openpart_compatibility_check') {
+        // 当兼容性检查列表变化时更新状态
+        updatePartCompatibilityCheckStatus()
       }
     }
     
@@ -1145,7 +1200,9 @@ export default {
       hideToast,
       // 新增：兼容性相关方法
       checkProjectCompatibility,
-      addPartToCompatibilityCheck,
+      togglePartCompatibilityCheck,
+      partCompatibilityCheckStatus,
+      updatePartCompatibilityCheckStatus,
       importProjectPartsToCompatibility,
       getCompatibilityButtonTooltip,
       viewDetailedCompatibility,
@@ -1963,10 +2020,12 @@ export default {
 }
 
 /* 新增：零件操作按钮区域 */
+/* 按钮组合样式调整 */
 .part-actions {
   display: flex;
   gap: 6px;
   margin-top: 4px;
+  align-items: center;
 }
 
 .view-part-btn {
@@ -2435,5 +2494,62 @@ export default {
   width: 16px;
   height: 16px;
   flex-shrink: 0;
+}
+
+/* 兼容性检查按钮样式 - 参考 PartCard.vue 的设计 */
+.compatibility-check-btn {
+  padding: 4px 6px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.compatibility-check-btn:hover:not(:disabled) {
+  background: #10b981;
+  color: white;
+  border-color: #10b981;
+  transform: scale(1.05);
+}
+
+.compatibility-check-btn:disabled {
+  background: var(--text-muted);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* 激活状态：绿色背景，表示已加入检查列表 */
+.compatibility-check-btn.active {
+  background: #10b981;
+  color: white;
+  border-color: #10b981;
+}
+
+.compatibility-check-btn.active:hover:not(:disabled) {
+  background: color-mix(in srgb, #10b981 90%, black);
+  transform: scale(1.05);
+}
+
+.compatibility-check-btn svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+  .compatibility-check-btn {
+    padding: 3px 4px;
+  }
+  
+  .compatibility-check-btn svg {
+    width: 10px;
+    height: 10px;
+  }
 }
 </style>

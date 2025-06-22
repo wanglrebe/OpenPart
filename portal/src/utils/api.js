@@ -211,7 +211,7 @@ class ComparisonManager {
   // 获取对比URL
   getComparisonUrl() {
     const list = this.getComparisonList()
-    if (list.length < 2) return null
+    if (list.length < 1) return null
     
     const ids = list.map(p => p.id).join(',')
     return `/compare?ids=${ids}`

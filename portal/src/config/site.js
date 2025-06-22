@@ -2,13 +2,13 @@ export const siteConfig = {
   // 站点基本信息
   title: 'OpenPart',
   subtitle: '零件搜索门户',
-  description: '搜索数千个电子元件的详细规格参数，找到最适合您项目的零件',
+  description: '搜索数千个零件的详细规格参数，找到最适合您项目的零件',
   
   // 首页配置
   hero: {
     title: '发现完美的',
-    highlight: '电子零件', // 可改为：机械零件、汽车配件等
-    subtitle: '搜索数千个电子元件的详细规格参数，找到最适合您项目的零件',
+    highlight: '零件', // 通用化，去掉"电子"限定
+    subtitle: '搜索数千个零件的详细规格参数，找到最适合您项目的零件',
     searchPlaceholder: '搜索零件型号、参数或分类...'
   },
 
@@ -21,7 +21,7 @@ export const siteConfig = {
     maxHistoryItems: 10
   },
   
-  // 热门搜索标签
+  // 热门搜索标签（可根据实际应用场景调整）
   popularTags: [
     'Arduino', 
     '电阻', 
@@ -38,28 +38,7 @@ export const siteConfig = {
   
   // 页脚信息
   footer: {
-    sections: [
-      {
-        title: 'OpenPart',
-        content: '开源零件数据管理系统'
-      },
-      {
-        title: '功能',
-        links: [
-          { text: '零件搜索', url: '/search' },
-          { text: '参数对比', url: '#' },
-          { text: '分类浏览', url: '#' }
-        ]
-      },
-      {
-        title: '关于',
-        links: [
-          { text: '项目介绍', url: '#' },
-          { text: '使用帮助', url: '#' },
-          { text: 'GitHub', url: 'https://github.com' }
-        ]
-      }
-    ],
-    copyright: '© 2024 OpenPart. 开源项目.'
+    projectDescription: '通用的零件搜索数据平台，提供全面的零件信息和项目管理功能，助力您的项目开发。',
+    copyright: '© 2024 OpenPart. 开源零件搜索平台'
   }
 }

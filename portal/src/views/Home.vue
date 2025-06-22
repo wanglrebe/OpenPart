@@ -1,4 +1,4 @@
-<!-- portal/src/views/Home.vue (优化版本 - 重新设计页脚) -->
+<!-- portal/src/views/Home.vue (完整更新版本 - 去除特定领域描述) -->
 <template>
   <div class="home">
     <!-- 全局导航 -->
@@ -54,7 +54,7 @@
                 </svg>
               </div>
               <h3>搜索零件</h3>
-              <p>浏览数千个电子零件</p>
+              <p>浏览数千个零件</p>
             </router-link>
             
             <router-link to="/favorites" class="feature-card favorites">
@@ -65,7 +65,6 @@
               </div>
               <h3>我的收藏</h3>
               <p>{{ favoritesCount }} 个收藏零件</p>
-              <div v-if="favoritesCount > 0" class="feature-badge">{{ favoritesCount }}</div>
             </router-link>
             
             <router-link to="/projects" class="feature-card projects">
@@ -76,7 +75,6 @@
               </div>
               <h3>项目清单</h3>
               <p>{{ projectsCount }} 个进行中项目</p>
-              <div v-if="projectsCount > 0" class="feature-badge">{{ projectsCount }}</div>
             </router-link>
             
             <div 
@@ -92,6 +90,22 @@
               <h3>零件对比</h3>
               <p>{{ comparisonCount }} 个零件待对比</p>
               <div class="feature-badge comparison">{{ comparisonCount }}</div>
+            </div>
+            
+            <!-- 兼容性检查按钮（有2+零件时显示） -->
+            <div 
+              v-if="compatibilityCount >= 2"
+              @click="goToCompatibilityCheck"
+              class="feature-card compatibility active"
+            >
+              <div class="feature-icon">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <h3>兼容性检查</h3>
+              <p>{{ compatibilityCount }} 个零件待检查</p>
+              <div class="feature-badge compatibility">{{ compatibilityCount }}</div>
             </div>
           </div>
         </div>
@@ -147,14 +161,14 @@
           <!-- 项目介绍 -->
           <div class="footer-section">
             <h5>OpenPart</h5>
-            <p>专业的电子零件搜索门户，提供全面的零件信息和项目管理功能，助力您的电子项目开发。</p>
+            <p>{{ config.footer.projectDescription }}</p>
           </div>
           
           <!-- 快速链接 -->
           <div class="footer-section">
             <h5>快速链接</h5>
             <ul>
-              <li><a href="#" @click.prevent>关于项目</a></li>
+              <li><router-link to="/about">关于项目</router-link></li>
               <li><a href="#" @click.prevent>帮助反馈</a></li>
             </ul>
           </div>
@@ -170,7 +184,7 @@
         </div>
         
         <div class="footer-bottom">
-          <p>&copy; 2024 OpenPart. 开源零件搜索平台</p>
+          <p>{{ config.footer.copyright }}</p>
         </div>
       </div>
     </footer>
@@ -183,6 +197,7 @@ import { useRouter } from 'vue-router'
 import GlobalNavigation from '../components/GlobalNavigation.vue'
 import SearchBox from '../components/SearchBox.vue'
 import { partsAPI, statsAPI, favoritesManager, comparisonManager } from '../utils/api'
+import { compatibilityCheckManager } from '../utils/compatibilityManager'
 import { siteConfig } from '../config/site'
 
 export default {
@@ -205,6 +220,7 @@ export default {
     const favoritesCount = ref(0)
     const projectsCount = ref(0)
     const comparisonCount = ref(0)
+    const compatibilityCount = ref(0)
     
     // 显示的统计数据
     const displayStats = computed(() => {
@@ -223,6 +239,7 @@ export default {
     const updateFeatureCounts = () => {
       favoritesCount.value = favoritesManager.getFavoritesCount()
       comparisonCount.value = comparisonManager.getComparisonCount()
+      compatibilityCount.value = compatibilityCheckManager.getCheckCount()
       
       // 获取项目数量
       const projects = JSON.parse(localStorage.getItem('openpart_projects') || '[]')
@@ -284,9 +301,25 @@ export default {
       }
     }
     
+    // 跳转兼容性检查页面
+    const goToCompatibilityCheck = () => {
+      const checkUrl = compatibilityCheckManager.getCheckUrl()
+      if (checkUrl) {
+        router.push(checkUrl)
+      } else {
+        // 如果没有足够的零件，直接跳转到兼容性检查页面
+        router.push('/compatibility')
+      }
+    }
+    
     // 监听存储变化
     const handleStorageChange = (e) => {
-      if (['openpart_favorites', 'openpart_comparison', 'openpart_projects'].includes(e.key)) {
+      if ([
+        'openpart_favorites', 
+        'openpart_comparison', 
+        'openpart_projects',
+        'openpart_compatibility_check'
+      ].includes(e.key)) {
         updateFeatureCounts()
       }
     }
@@ -308,10 +341,12 @@ export default {
       favoritesCount,
       projectsCount,
       comparisonCount,
+      compatibilityCount,
       onSearch,
       searchTag,
       searchCategory,
-      goToComparison
+      goToComparison,
+      goToCompatibilityCheck
     }
   }
 }
@@ -482,6 +517,16 @@ export default {
   background: color-mix(in srgb, #f59e0b 10%, var(--bg-primary));
 }
 
+.feature-card.compatibility {
+  background: color-mix(in srgb, #10b981 5%, var(--bg-primary));
+  border-color: color-mix(in srgb, #10b981 20%, var(--border-color));
+}
+
+.feature-card.compatibility:hover {
+  border-color: #10b981;
+  background: color-mix(in srgb, #10b981 10%, var(--bg-primary));
+}
+
 .feature-icon {
   width: 48px;
   height: 48px;
@@ -507,6 +552,11 @@ export default {
 .feature-card.comparison .feature-icon {
   color: #f59e0b;
   background: color-mix(in srgb, #f59e0b 15%, transparent);
+}
+
+.feature-card.compatibility .feature-icon {
+  color: #10b981;
+  background: color-mix(in srgb, #10b981 15%, transparent);
 }
 
 .feature-icon svg {
@@ -543,6 +593,10 @@ export default {
 
 .feature-badge.comparison {
   background: #f59e0b;
+}
+
+.feature-badge.compatibility {
+  background: #10b981;
 }
 
 /* 统计信息 */

@@ -130,7 +130,6 @@ const routes = [
       next()
     }
   },
-  
   {
     path: '/compatibility/guide',
     name: 'CompatibilityGuide',
@@ -141,6 +140,14 @@ const routes = [
       requiresAuth: false, // 公开访问
       showInNavigation: false, // 不在主导航显示
       parentRoute: 'CompatibilityCheck' // 父级路由
+    }
+  },
+  {
+    path: '/about',
+    name: 'About',
+    component: () => import('../views/About.vue'),
+    meta: {
+      title: '关于项目 - OpenPart'
     }
   }
 
